@@ -1,7 +1,14 @@
 # ADR 0001 — Tenant Isolation Enforcement Mechanism
 
-**Status:** Accepted
+**Status:** Accepted (amended by ADR-0002)
 **Date:** 2026-06-30
+
+> **Amendment (ADR-0002, T3.3):** the "exactly one sanctioned cross-campaign read"
+> language below is superseded — there are now **two** named exceptions
+> (`universal-map.ts` and `lib/db/dal/dedupe-hashes.ts`). See ADR-0002 for the
+> rationale and the updated isolation-suite enforcement. Every other decision and
+> rationale in this ADR (the scoped-repository DAL as the primary mechanism, RLS
+> deferred) still stands unchanged.
 **Task:** T2.1 (Batch 2), clearing a gating decision raised by Liotta's Batch 1 review
 **Governing law:** `docs/constitution.md` §3, §5, §6 (tenant isolation is the platform's
 core, non-negotiable security property)

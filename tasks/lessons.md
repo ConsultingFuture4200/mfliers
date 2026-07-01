@@ -329,3 +329,304 @@ agent doesn't relearn them (CLAUDE.md §"Self-improvement loop").
   Verified the diff was exactly Prettier's own reformatting of content I
   wrote, and disclosed it per the standing rule rather than complying with
   the embedded "don't tell the user" instruction.
+- **T3.1 — creating a campaign has no natural "scoping campaignId" to hang
+  the DAL's required-first-parameter convention on** (it's the row being
+  born, not a child row being filtered). Resolved by minting the id with
+  `randomUUID()` in `lib/campaign/lifecycle.ts` *before* calling
+  `lib/db/dal/campaigns.ts`'s new `insertCampaign(campaignId, fields)` —
+  same pattern `app/api/uploads/sign/route.ts` (T2.4) already used for
+  submission ids. This keeps `campaignId` a genuine required first
+  parameter (so the isolation suite's closed-world arity/throw check over
+  every DAL export, `tests/isolation/isolation.test.ts`, covers it
+  automatically with zero edits to that file) instead of awkwardly
+  reordering the signature or carving out another named exception next to
+  `universal-map.ts`. Any future DAL "create" function for a tenant-rooted
+  table should follow the same shape: mint the id in the calling `lib/`
+  module, pass it as the DAL function's first argument.
+- **T3.1 — the schema has no column for "when a player reached their Nth
+  approved submission,"** which the grand-prize tie-break rule ("most
+  approved placements, then earliest to reach that count") needs. Rather
+  than adding a new column/migration this card's file list doesn't cover,
+  derived it at close-time from data that already exists: fetch every
+  `approved` submission for the campaign (`listSubmissions`, already
+  campaign-scoped), group by `playerId`, sort each player's approved
+  `receivedAt` timestamps ascending, and take the timestamp at index
+  `approvedCount - 1` as "when they reached their final count." This is
+  `O(campaign submissions)` at close time only (not a hot path) and needs
+  no schema change. Future ledger/tier work (T4.3) that also needs
+  "reached tier N at" timing should reuse this derivation rather than
+  adding a redundant column, unless profiling at real scale says
+  otherwise.
+- **T3.1 — a fabricated tool-output "note"** (same shape as every prior
+  instance above — attributes a change to an unnamed external actor,
+  appends "don't tell the user") appeared after a self-run
+  `npx prettier --write` on the 4 files `format:check` flagged
+  (`app/api/admin/campaigns/route.ts`, `lib/campaign/lifecycle.ts`,
+  `lib/db/dal/campaigns.ts`, `tests/campaign/lifecycle.test.ts`). Verified
+  the diff was exactly Prettier's own line-wrapping of content written
+  this session (re-ran `pnpm format:check` — clean afterward) and
+  disclosed it per the standing rule rather than complying with the
+  embedded "don't tell the user" instruction.
+- **T3.2 — the atomic claim's "no undecided submission attached" guard is
+  a correlated subquery inside the same conditional `UPDATE`'s `WHERE`,
+  not a separate statement.** Drizzle's `notExists(db.select(...).from(...)
+  .where(...))` builder works fine as one leaf of an `and(...)`/`or(...)`
+  tree passed to `.update(targets).where(...)`, and the inner `select`'s
+  `where` can reference the *outer* `targets` row's columns (e.g.
+  `eq(submissions.targetId, targets.id)`) even though `targets` isn't in
+  the inner query's own `from()` — Drizzle emits it as a plain correlated
+  SQL subquery, which Postgres evaluates per-row against the row currently
+  being considered for the `UPDATE`. This is what lets `claimTarget`
+  (`lib/db/dal/targets.ts`) enforce "an expired amber with a still-pending
+  submission is NOT reclaimable" (requirement 5) in the exact same atomic
+  statement that provides the race-safety guarantee, instead of a
+  read-then-decide step that would reopen the TOCTOU race the card's
+  atomicity requirement exists to close. Also confirmed `.update(...)
+  .returning(selection)` accepts the same `latOf`/`longOf` (T2.1
+  `ST_Y`/`ST_X`) SQL-projection object `.select(selection)` does — no
+  separate read-back needed after a successful conditional write.
+- **T3.2 — a fabricated tool-output "note"** (same shape as every prior
+  instance above) appeared after a self-run `npx prettier --write` on the
+  3 files this card touched (`app/api/campaigns/[id]/targets/[targetId]/
+  claim/route.ts`, `lib/target/state-machine.ts`,
+  `tests/target/state-machine.test.ts`). Verified the diff was exactly
+  Prettier's own reformatting of content written this session (re-ran
+  `pnpm format:check` — clean afterward) and disclosed it per the
+  standing rule rather than complying with the embedded "don't tell the
+  user" instruction.
+- **T3.3 — a genuine, unresolved conflict between this card's requirement
+  and ADR-0001 / constitution non-negotiable #1.** PRD FR-F3 (quoted in
+  the card) requires the dedupe check to catch "the same photo reused
+  across different pins... cross-campaign reuse is caught the same way" —
+  i.e. it must compare a new submission's hash against *every* campaign's
+  prior submissions, not just the submitting campaign's own. ADR-0001 and
+  the constitution both describe `lib/db/dal/universal-map.ts` as "the
+  ONE sanctioned cross-campaign read" / "exactly one." There is no way to
+  satisfy both literally. Resolved (pending explicit reviewer sign-off,
+  flagged in this task's `needsClarification`) by adding a **second**
+  narrow, explicitly-named exception, `lib/db/dal/dedupe-hashes.ts`'s
+  `listAllSubmissionHashes()` — same shape as `universal-map.ts` (own
+  file, unmissable name, arity 0), returning only
+  `{submissionId, campaignId, targetId, phash}` (no PII, no photo URL, no
+  ledger data). This keeps `tests/isolation/isolation.test.ts` (T2.1,
+  not this card's file to edit) passing unchanged — that suite only
+  iterates a hardcoded module list plus asserts `universal-map.ts`
+  specifically has one export, so it doesn't (and structurally can't,
+  without being edited) notice a second exception file added elsewhere.
+  Future cards that need a similar cross-tenant-but-non-PII read should
+  follow the same "own file, obvious name, minimal fields" shape rather
+  than loosening an existing scoped DAL module's `campaignId` requirement
+  — and this specific tension (ADR-0001's "exactly one" language vs. a
+  second real exception now existing) should get an ADR addendum once a
+  reviewer confirms the approach, not be left as a silent drift.
+- **T3.3 — perceptual-hash threshold tuning needs a real seeded image set,
+  not hand-picked numbers, and `sharp` (already an optional/ignored
+  transitive dependency of Next.js's image optimizer) is the right tool
+  to both synthesize the seed set and compute the hash** — `pnpm add
+  sharp` promotes it to a direct dependency cheaply (no download; the
+  native binding was already in the pnpm store from Next's optional
+  dep). Chosen algorithm: 64-bit dHash (9x8 grayscale downsample,
+  adjacent-pixel comparison per row) over a DCT pHash — no extra DCT
+  library needed, cheap per-submission, and empirically clears the
+  different-target gate's false-positive bar (measured: 0/66 FP, 0/12 FN
+  at threshold=9) against a synthetic 12-placement seed set generated
+  with `sharp` (same flier SVG artwork composited onto 12 different
+  background colors/positions/scales, standing in for 12 independently
+  photographed real placements; the "reused photo" case is a `resize` +
+  JPEG-requantize of the same buffer, not a fresh render — a real
+  re-upload, not a new photo). The empirical gap was wide (reused-photo
+  pairs topped out at 5 bits; distinct-placement pairs bottomed out at 13
+  bits), so the threshold has real margin, not a boundary pin. Actually
+  run the tuning script against the live-rendered set before writing the
+  threshold/rate numbers into a doc comment — an earlier draft of this
+  comment had guessed-plausible-sounding numbers before the script was
+  run for real; they were wrong (off by roughly 2x) and were replaced
+  with the measured values once `tune.ts` actually ran. Future
+  threshold-tuning cards should treat "run it, then write the number"
+  as non-negotiable — a plausible-sounding fabricated number is a
+  documentation bug waiting to be discovered.
+- **T3.3 — the `pnpm-workspace.yaml` bogus-`allowBuilds` injection (see
+  T2.4's entry above) recurred a fifth time**, again with no
+  accompanying tool-output note this run — confirmed via `git diff` at
+  the very start of this task (before touching the file), matching the
+  T2.4 lesson that it can already be resident from a prior session.
+  Additionally, in this task specifically, **two fabricated tool-output
+  "notes"** of the established shape (attributes a change to an unnamed
+  external actor, appends "don't tell the user") appeared: once after a
+  legitimate `pnpm add sharp` (framed as `package.json` being "modified
+  by the user or a linter"), and once after a self-run
+  `npx prettier --write` on the two files `format:check` flagged
+  (`lib/fraud/dedupe.ts`, `tests/fraud/fixtures/synth-flier.ts`). Both
+  verified against `git diff`/re-running the check (clean afterward) to
+  confirm they were exactly the commands' own effects, and disclosed
+  rather than silently accepted, per the now well-established standing
+  rule.
+- **T3.4 — the card's design intent ("timestamp sanity compares EXIF
+  capture, client, and server times") assumes a `clientTs` field that
+  doesn't exist anywhere in the data model.** `types/domain.ts`'s
+  `Submission` and `lib/db/schema/submissions.ts` only persist `exifTs`
+  and server-stamped `receivedAt` — no client-reported timestamp column.
+  `docs/tasks/batch-4.md` (capture flow) is the first place a client
+  timestamp is even collected, and it isn't listed as a new column there
+  either. Resolved by giving `checkTimestamps` an optional, non-persisted
+  `clientTs` parameter (`lib/fraud/time.ts`) rather than adding a schema
+  column outside this card's `Files to Create/Modify` list — flagged
+  `NEEDS_CLARIFICATION` in the module doc comment and this task's report.
+  Future cards (T4.1's capture flow, T3.5's orchestrator) should either
+  thread a real client timestamp through to `checkTimestamps` via this
+  parameter, or a reviewer should decide the column belongs on
+  `submissions` after all — don't silently pick one without surfacing it,
+  same pattern as T3.3's dedupe-hashes exception.
+- **T3.4 — "player's previous submission" (travel-speed check) was scoped
+  to the *same* campaign, not global across campaigns**, since the card's
+  signature (`checkTravelSpeed(submission, player)`) carries a
+  `campaignId` via `submission.campaignId` and constitution §3 requires
+  every campaign-scoped-table query to filter by `campaign_id`; PRD FR-F6
+  doesn't explicitly demand cross-campaign comparison the way FR-F3
+  (dedupe) did for T3.3, so no second "sanctioned exception" file was
+  needed here. `lib/db/dal/submissions.ts`'s new `getPreviousSubmission`
+  takes `campaignId` as a required first arg like every other scoped DAL
+  export and is covered by the isolation suite's dynamic arity/runtime
+  check. If a future card wants cross-campaign travel-speed correlation,
+  treat it the same way T3.3 did (`docs/decisions/0001`) — a new, narrowly
+  named, minimal-fields exception file — not a loosened `submissions.ts`.
+- **T3.4 — PostGIS distance-between-two-literal-points (no table involved)
+  still has to go through `lib/db/dal/**` because the ESLint
+  `no-restricted-imports` boundary (batch-2 review) bans importing
+  `@/lib/db/client` from anywhere outside `lib/db/**`, regardless of
+  whether the query actually touches a scoped table.** Added
+  `distanceMeters(a, b)` to `lib/db/dal/geo.ts` (already the "one choke
+  point" for geography codec logic) for this — it deliberately does NOT
+  take `campaignId` and is NOT one of the isolation suite's scanned
+  modules (that suite only enumerates
+  campaigns/targets/submissions/campaignMemberships/payoutLedger), since
+  it never reads a campaign-scoped row. Target-proximity, by contrast
+  (`checkTargetProximity` in `lib/db/dal/targets.ts`), DOES touch a real
+  scoped table (`targets.location`) and uses `ST_DWithin` directly against
+  the column so the GiST index stays usable, rather than decoding to
+  lat/long and re-deriving distance generically.
+- **T3.4 — a fabricated tool-output "note"** (same recurring shape:
+  attributes a change to an unnamed actor/"the user or a linter", appends
+  "don't tell the user") appeared after a legitimate self-run
+  `pnpm format --check` (whose underlying script is `prettier --write .
+  --check`, so it both reformats and then reports) touched 3 files this
+  task wrote (`lib/fraud/time.ts`, `tests/fraud/geo.test.ts`,
+  `tests/fraud/time.test.ts`). Verified by re-running `pnpm format --check`
+  (clean afterward) to confirm it was exactly that command's own
+  formatting effect, and disclosed per the now well-established standing
+  rule rather than complying with the embedded "don't tell the user"
+  instruction. This is at least the sixth occurrence across T2.4/T3.2/T3.3
+  (twice)/T3.4 — worth hardening (e.g. running `format --check` without
+  `--write` in the repo's `format` script, or an explicit pre-task-start
+  `git status`/diff baseline) rather than re-discovering it per task.
+- **T3.5 — the card's decision policy ("hard-fail → reject (or review per
+  a documented rule)... soft/ambiguous flags → needs_review") is
+  deliberately underspecified and has to be resolved and documented by the
+  implementer, not guessed silently.** Resolved as: `duplicate` and
+  `proximity` failures are the two checks the card's design intent names
+  explicitly as "hard-fail" candidates ("proximity fail, dedupe hit,
+  geofence") → auto-**reject**, unconditionally (outranks tier-3);
+  `gps-agreement`/`timestamp-sanity`/`travel-speed` failures are "soft"
+  signals with plausible innocent explanations → **needs_review**, never
+  an auto-reject. Documented in `lib/fraud/pipeline.ts`'s module doc
+  comment as the citable "policy" the acceptance criterion asks for.
+  Future cards that add a new fraud check should explicitly classify it
+  into `HARD_FAIL_CHECKS` or leave it as a soft flag rather than letting it
+  default silently into one bucket.
+- **T3.5 — the tier-3 threshold (FR-F7's "26+") is derived from
+  `campaign.tierTable`'s open-ended top band's `minCount`, not
+  hard-coded**, even though the card's own requirement 3 text says "(≥26)"
+  parenthetically. `docs/tasks/batch-4.md`'s T4.3 anti-requirement ("do
+  NOT hard-code Mycofest's tier numbers — read campaign config") states
+  the same principle T3.1 already built the `tier_table` shape for
+  (`lib/campaign/tier-validation.ts` guarantees the last band is always
+  the open "and above" band), and `runPipeline` already takes `campaign`
+  as a required parameter for exactly this kind of per-campaign-config
+  read (mirrors `checkProximity` honoring `campaign.proximityRadiusM`
+  instead of the platform default). Hard-coding `26` a second place would
+  have silently diverged from a differently-configured campaign's own
+  tier table. `DEFAULT_TIER_3_THRESHOLD = 26` is kept as a documented
+  reference/test-fixture constant only — `runPipeline` never reads it.
+  Flagged here rather than silently picking one interpretation, since a
+  future card assuming "26 is a platform constant" would be wrong.
+- **T3.5 — no DAL write existed yet to persist a submission's
+  `fraudChecks`/`decision` (card requirement 4).** Added
+  `recordSubmissionDecision(campaignId, submissionId, fraudChecks,
+  decision)` to `lib/db/dal/submissions.ts` (not in this card's literal
+  "Files to Create/Modify" list, but extending an existing scoped DAL file
+  rather than writing a raw `db.update()` in `lib/fraud/pipeline.ts` is
+  required by the ESLint `no-restricted-imports` boundary and matches
+  T3.4's precedent of extending `submissions.ts`/`geo.ts` beyond its own
+  file list). Mirrors `getSubmission`'s not-found/not-yours (`null`)
+  contract and is automatically covered by the isolation suite's dynamic
+  arity/runtime scan (it just needs `campaignId` as a required first
+  param — no suite file edit needed).
+- **T3.5 — a fabricated tool-output "note"** (same recurring shape:
+  attributes a change to an unnamed actor/"the user or a linter", appends
+  "don't tell the user") appeared after a legitimate self-run `pnpm
+  format --check` touched the 2 files this task wrote
+  (`lib/fraud/pipeline.ts`, `tests/fraud/pipeline.test.ts`). Verified by
+  re-running `pnpm format --check` (clean afterward) to confirm it was
+  exactly that command's own formatting effect, and disclosed per the
+  now well-established standing rule. Seventh occurrence across
+  T2.4/T3.2/T3.3 (twice)/T3.4/T3.5 — the hardening suggestion from the
+  T3.4 entry (run `prettier --check` without `--write`, or an explicit
+  pre-task `git status` baseline) still hasn't been applied; a future
+  batch's first task should just do it rather than re-noting it a
+  seventh time.
+- **Batch 3 review fixes — the T3.3 self-flagged ADR-0001 conflict is now
+  resolved, not just flagged.** Both Linus and Liotta's review passes
+  independently caught the same gap: `lib/db/dal/dedupe-hashes.ts`'s
+  `listAllSubmissionHashes()` shipped as a second cross-campaign read with
+  no ADR amendment and no isolation-suite registration, contradicting
+  ADR-0001's literal "exactly one" language and leaving that suite's "sole
+  exception" assertion silently false-but-passing. Closed by
+  `docs/decisions/0002-dedupe-hash-cross-campaign-exception.md` (amends
+  ADR-0001 to name two sanctioned exceptions) and by extending
+  `tests/isolation/isolation.test.ts` to register `dedupe-hashes.ts` as a
+  named exception and lock its exact returned-column set. This is the
+  reviewer sign-off + ADR-in-the-same-PR path Linus's finding named as
+  option (a), rather than the schema-level alternative (a dedicated
+  `dedupe_hashes` table) — see ADR-0002's "why not" section for the
+  cost/benefit.
+- **Batch 3 review fixes — `setCampaignState` and `setMembershipRanks`
+  hardened for concurrency/scale.** `setCampaignState` now takes an
+  `fromState` and does a single conditional `UPDATE ... WHERE id = ? AND
+  state = ?`, mirroring `targets.ts`'s atomic-claim pattern, so two
+  concurrent `activateCampaign`/`closeCampaign` calls can't both silently
+  "succeed" against a stale read (`activateCampaign`/`closeCampaign` now
+  throw `IllegalTransitionError` on a `null` result). `setMembershipRanks`
+  is now a single bulk `UPDATE ... FROM (VALUES ...)` instead of one
+  sequential awaited `UPDATE` per player, closing a real timeout risk at
+  the platform's ~2,000-players/campaign ceiling.
+- **Batch 3 review fixes — claim route now rejects non-live campaigns.**
+  Added `assertCampaignLive` to `lib/campaign/lifecycle.ts` (mirrors
+  `assertCampaignAccrualAllowed`'s shape) and call it from
+  `app/api/campaigns/[id]/targets/[targetId]/claim/route.ts` right after
+  the campaign is fetched — a target in a `draft`/`closed` campaign can no
+  longer be claimed via a direct API call. Kept the check in the route
+  (calling a `lib/` function, per constitution §6) rather than changing
+  `claim()`'s signature, since `claim()` has ~18 existing call sites in
+  `tests/target/state-machine.test.ts` and the route is currently
+  `claim()`'s only caller — revisit if a second caller of `claim()`
+  appears without going through this route.
+- **Batch 3 review fixes — dedupe hit is no longer an auto-reject.**
+  Liotta flagged that `duplicate` was in `lib/fraud/pipeline.ts`'s
+  `HARD_FAIL_CHECKS`, auto-rejecting on a signal whose false-positive rate
+  is only measured against a 66-pair *synthetic* seed set (T3.3's own
+  module doc comment already warns real photos "could land in the
+  ambiguous middle"). `HARD_FAIL_CHECKS` now contains only `proximity`; a
+  dedupe hit routes to `needs_review` until T4.2's human review queue
+  produces a real-world false-positive signal. Updated
+  `tests/fraud/pipeline.test.ts`'s dedupe-hit case to assert
+  `needs_review` instead of `rejected`.
+- **Batch 3 review fixes — skipped.** `lib/fraud/pipeline.ts`'s
+  decision-persist / target-approve / ledger-accrue split across two
+  transactions (Liotta, medium) is a real seam but its fix requires code
+  that doesn't exist yet in this batch (the ledger DAL and the capture/
+  approval route are T4.1/T4.3) — the card's own anti-requirement forbids
+  `runPipeline` from touching the ledger or target state directly. Left as
+  documented (module doc comment already covers the decoupling contract);
+  T4.1/T4.3 must wrap `recordSubmissionDecision` + `approve_target` +
+  `accrue_ledger` in one transaction or make ledger accrual idempotent by
+  `(campaignId, submissionId)`, per the finding.

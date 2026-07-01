@@ -1,5 +1,8 @@
 /**
- * Tenant-isolation suite (T2.1) — the Batch 2 review gate.
+ * Tenant-isolation suite (T2.1) — the Batch 2 review gate; extended by T3.3
+ * (Batch 3 review gate) to also register `lib/db/dal/dedupe-hashes.ts` as
+ * the second sanctioned cross-campaign read (ADR-0002, amending ADR-0001's
+ * original "exactly one" framing).
  *
  * PRD G-6 / constitution §5: "automated tests assert no host reads another
  * campaign's data and no spend crosses budgets." This suite exercises the
@@ -34,6 +37,7 @@ import * as submissionsDal from "@/lib/db/dal/submissions";
 import * as membershipsDal from "@/lib/db/dal/campaign-memberships";
 import * as ledgerDal from "@/lib/db/dal/payout-ledger";
 import * as universalMapDal from "@/lib/db/dal/universal-map";
+import * as dedupeHashesDal from "@/lib/db/dal/dedupe-hashes";
 
 /** Amounts (integer cents) seeded into each campaign's ledger below. Chosen
  * to be distinct so a budget-bleed bug (reading the wrong campaign's rows)
@@ -236,6 +240,25 @@ describe.skipIf(!hasTestDatabase())(
       });
     });
 
+    describe("dedupe hashes: the second sanctioned cross-campaign read (ADR-0002)", () => {
+      it("returns hash records from both campaigns", async () => {
+        const records = await dedupeHashesDal.listAllSubmissionHashes();
+        const campaignIds = new Set(records.map((r) => r.campaignId));
+        expect(campaignIds.has(seed.campaignA.campaignId)).toBe(true);
+        expect(campaignIds.has(seed.campaignB.campaignId)).toBe(true);
+      });
+
+      it("exposes only {submissionId, campaignId, targetId, phash} — no PII, photo URL, or ledger data", async () => {
+        const records = await dedupeHashesDal.listAllSubmissionHashes();
+        expect(records.length).toBeGreaterThan(0);
+        for (const record of records) {
+          expect(Object.keys(record).sort()).toEqual(
+            ["campaignId", "phash", "submissionId", "targetId"].sort(),
+          );
+        }
+      });
+    });
+
     describe("DAL typed surface: every campaign-scoped export requires campaignId", () => {
       const scopedModules: Record<string, Record<string, unknown>> = {
         campaigns: campaignsDal,
@@ -267,11 +290,16 @@ describe.skipIf(!hasTestDatabase())(
         }
       }
 
-      it("the universal-map module is the sole, explicitly-named exception", () => {
+      it("universal-map and dedupe-hashes are the two sanctioned exceptions (ADR-0002) — no others exist", () => {
         expect(Object.keys(universalMapDal)).toEqual([
           "getPublicPinsAcrossLiveCampaigns",
         ]);
         expect(universalMapDal.getPublicPinsAcrossLiveCampaigns.length).toBe(0);
+
+        expect(Object.keys(dedupeHashesDal)).toEqual([
+          "listAllSubmissionHashes",
+        ]);
+        expect(dedupeHashesDal.listAllSubmissionHashes.length).toBe(0);
       });
     });
   },

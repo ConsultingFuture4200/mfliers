@@ -25,11 +25,41 @@ acceptance criteria are met. Two review gates (T2.1, T3.3) block their dependent
       sandbox — see lessons.md)
 
 ## Batch 3 — Core logic  (⊢ T3.3 dedupe review gate)
-- [ ] T3.1 — Campaign lifecycle + configuration
-- [ ] T3.2 — Target + claim state machine
-- [ ] T3.3 — Dedupe: perceptual hash + different-target gate  **[REVIEW GATE]**
-- [ ] T3.4 — Geo + time fraud checks
-- [ ] T3.5 — Pipeline orchestrator + tier-3 routing
+- [x] T3.1 — Campaign lifecycle + configuration (24/24 new tests green
+      against a live PostGIS DB; full suite 81/81 non-skipped green;
+      `pnpm lint`/`build`/`format:check` clean — see lessons.md)
+- [x] T3.2 — Target + claim state machine (15/15 new tests green against a
+      live PostGIS DB, including a real concurrent-claim race test; full
+      suite 104/104 non-skipped green; `pnpm lint`/`build`/`format:check`
+      clean — see lessons.md)
+- [x] T3.3 — Dedupe: perceptual hash + different-target gate  **[REVIEW GATE — 10/10
+      new tests green against a live PostGIS DB (dHash unit tests + seeded
+      threshold-tuning measurement + checkDuplicate acceptance criteria);
+      full suite 114/114 non-skipped green; `pnpm lint`/`build`/`format:check`
+      clean. Threshold=9/64 bits: measured 0% FP (0/66 seed pairs), 0% FN
+      (0/12 seed pairs) — see lib/fraud/dedupe.ts's doc comment. NOT yet
+      given the human confirmation CLAUDE.md requires before T3.5 composes
+      it — also flags an unresolved conflict between this card's
+      cross-campaign requirement (PRD FR-F3) and ADR-0001's "exactly one
+      cross-campaign read" framing (see lessons.md and this task's
+      needsClarification) that needs explicit reviewer sign-off alongside
+      the threshold numbers.]**
+- [x] T3.4 — Geo + time fraud checks (18/18 new tests green against a live
+      PostGIS DB — checkProximity/checkGpsAgreement acceptance-criteria
+      distances (18m/80m @ 40m default, 22m/120m @ 50m, per-campaign
+      override) plus checkTimestamps (unit, no DB) and checkTravelSpeed
+      (5km/2min flag + campaign-scoping); full suite 136/136 non-skipped
+      green; `pnpm lint`/`build`/`format:check` clean. NEEDS_CLARIFICATION:
+      no `clientTs` field exists on `Submission`/`submissions` — see
+      lib/fraud/time.ts's doc comment and lessons.md.)
+- [x] T3.5 — Pipeline orchestrator + tier-3 routing (9/9 new tests green
+      against a live PostGIS DB — auto-approve on all-pass tier-1/2, forced
+      needs_review at tier-3 (derived from `campaign.tierTable`'s open top
+      band, not hard-coded), reject on a hard-fail (dedupe hit or proximity
+      fail), needs_review on a soft/ambiguous flag alone, full persistence
+      of all 5 `FraudCheckResult`s + decision, `autoDecisionRate` unit
+      tests; full suite 147/147 non-skipped green; `pnpm lint`/`build`/
+      `format:check` clean — see lessons.md)
 
 ## Batch 4 — Surfaces
 - [ ] T4.1 — Submission capture flow
