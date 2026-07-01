@@ -36,6 +36,13 @@
       "when": 1782869594880,
       "tag": "0004_host_user_campaign_invariant",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782871714862,
+      "tag": "0005_aberrant_cassandra_nova",
+      "breakpoints": true
     }
   ]
 }

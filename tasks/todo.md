@@ -11,10 +11,18 @@ acceptance criteria are met. Two review gates (T2.1, T3.3) block their dependent
 - [x] T1.5 — CI pipeline + pooled DB connection
 
 ## Batch 2 — Data + Auth  (⊢ T2.1 isolation review gate)
-- [ ] T2.1 — Isolation-scoped DAL + isolation suite  **[REVIEW GATE]**
-- [ ] T2.2 — Phone-OTP player authentication
-- [ ] T2.3 — Host/admin auth + role-scoping middleware
-- [ ] T2.4 — Cloudflare R2 storage + signed uploads
+- [x] T2.1 — Isolation-scoped DAL + isolation suite  **[REVIEW GATE — suite is 100%
+      green against a live PostGIS DB (28/28); awaiting the human confirmation
+      CLAUDE.md requires before Batch 3 starts]**
+- [x] T2.2 — Phone-OTP player authentication
+- [x] T2.3 — Host/admin auth + role-scoping middleware  (46/46 tests green,
+      `pnpm lint`/`build`/`format:check` clean; `users.email`/`password_hash`
+      added via migration 0005, nullable — see lessons.md)
+- [x] T2.4 — Cloudflare R2 storage + signed uploads (52/52 tests green,
+      including a live-mock suite against a real MinIO S3-compatible
+      container; `pnpm lint`/`build`/`format:check` clean; R2 credentials
+      themselves unverified-here — no live Cloudflare account in this
+      sandbox — see lessons.md)
 
 ## Batch 3 — Core logic  (⊢ T3.3 dedupe review gate)
 - [ ] T3.1 — Campaign lifecycle + configuration

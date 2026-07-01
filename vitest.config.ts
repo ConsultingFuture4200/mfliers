@@ -22,6 +22,18 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     exclude: ["tests/e2e/**", "node_modules/**"],
     fileParallelism: false,
+    server: {
+      deps: {
+        // next-auth (ESM) does extensionless `import ... from "next/server"`.
+        // Next.js's own bundler (webpack/Turbopack) resolves that fine, but
+        // Vitest's default SSR module loader treats "next" as an external
+        // and falls back to strict Node ESM resolution, which requires an
+        // explicit extension and fails. Inlining forces Vite to transform
+        // next-auth (and its @auth/core dependency) itself, which resolves
+        // the specifier the same permissive way the app's own bundler does.
+        inline: ["next-auth", "@auth/core"],
+      },
+    },
   },
   resolve: {
     alias: {

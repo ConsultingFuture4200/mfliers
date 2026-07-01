@@ -17,13 +17,30 @@
  * trigger owns it, and a duplicate manual insert will violate the
  * `(user_id, campaign_id)` primary key.
  */
-import { pgTable, uuid, index, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, index, primaryKey } from "drizzle-orm/pg-core";
 import { userTypeEnum } from "./enums";
 import { campaigns } from "./campaigns";
 
+/**
+ * `email`/`passwordHash` (T2.3 — PRD FR-A2, constitution §2 "email +
+ * password, role-scoped"): T1.3 didn't add these when it created this
+ * table (only `type`), so T2.3 extends it here rather than duplicating a
+ * parallel staff-credentials table. Both are nullable: `tests/fixtures/
+ * seed-two-campaigns.ts` (T1.4) and the isolation suite (T2.1) insert bare
+ * `{ type: "host" }` rows with no login credentials, and that fixture is
+ * out of this card's file list to edit — making these columns NOT NULL
+ * would break every existing DB-backed test in `tests/isolation/` and
+ * `tests/fixtures/`. A user with a null `passwordHash` simply can't
+ * authenticate via `authenticateStaff` (`lib/auth/staff.ts`); it does not
+ * weaken authorization, since `requireCampaignAccess`/`requireSiteAdmin`
+ * (`lib/auth/guards.ts`) operate on an already-authenticated principal,
+ * never on a raw user row.
+ */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   type: userTypeEnum("type").notNull(),
+  email: text("email").unique(),
+  passwordHash: text("password_hash"),
 });
 
 /**
