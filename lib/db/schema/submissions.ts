@@ -8,6 +8,15 @@
  * and authoritative for payout/fraud logic (constitution §3, time) — the
  * DAL/handler layer (not this schema) is responsible for never accepting a
  * client-supplied value for it.
+ *
+ * `target_id` uses a **composite** FK on `(campaign_id, target_id)` ->
+ * `targets(campaign_id, id)` rather than a plain `id` FK, so a submission
+ * can never point at a target belonging to a different campaign than the
+ * submission's own `campaign_id` (Liotta review, batch 1: tenant isolation
+ * must be structural, not just "every query remembers to filter by
+ * campaign_id"). See `targets.ts` for the mirrored (DB-only, not
+ * TS-declared — see that file for why) `filled_by_submission_id` composite
+ * FK back onto this table.
  */
 import {
   pgTable,
@@ -15,7 +24,8 @@ import {
   text,
   jsonb,
   index,
-  type AnyPgColumn,
+  foreignKey,
+  unique,
 } from "drizzle-orm/pg-core";
 import type { FraudCheckResult } from "@/types/domain";
 import { geographyPoint, timestamptz } from "./columns";
@@ -35,9 +45,10 @@ export const submissions = pgTable(
     playerId: uuid("player_id")
       .notNull()
       .references(() => players.id),
-    targetId: uuid("target_id")
-      .notNull()
-      .references((): AnyPgColumn => targets.id),
+    /** FK to `targets` is declared below as a composite
+     * `(campaign_id, target_id)` -> `targets(campaign_id, id)` key — see
+     * module doc comment. */
+    targetId: uuid("target_id").notNull(),
     photoUrl: text("photo_url").notNull(),
     deviceGps: geographyPoint("device_gps").notNull(),
     exifGps: geographyPoint("exif_gps"),
@@ -53,5 +64,13 @@ export const submissions = pgTable(
     decidedBy: uuid("decided_by").references(() => users.id),
     decidedAt: timestamptz("decided_at"),
   },
-  (table) => [index("submissions_campaign_id_idx").on(table.campaignId)],
+  (table) => [
+    index("submissions_campaign_id_idx").on(table.campaignId),
+    unique("submissions_campaign_id_id_key").on(table.campaignId, table.id),
+    foreignKey({
+      name: "submissions_campaign_target_fk",
+      columns: [table.campaignId, table.targetId],
+      foreignColumns: [targets.campaignId, targets.id],
+    }),
+  ],
 );

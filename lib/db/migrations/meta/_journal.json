@@ -15,6 +15,27 @@
       "when": 1782866497803,
       "tag": "0001_illegal_piledriver",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782869550465,
+      "tag": "0002_cultured_kitty_pryde",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782869569875,
+      "tag": "0003_targets_filled_by_submission_composite_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782869594880,
+      "tag": "0004_host_user_campaign_invariant",
+      "breakpoints": true
     }
   ]
 }

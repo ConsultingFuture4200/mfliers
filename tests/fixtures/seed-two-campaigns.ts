@@ -67,10 +67,11 @@ async function seedCampaign(
     })
     .returning({ id: schema.campaigns.id });
 
-  await db.insert(schema.userCampaigns).values({
-    userId: host.id,
-    campaignId: campaign.id,
-  });
+  // NOTE: no manual `userCampaigns` insert here — the
+  // `sync_campaign_host_to_user_campaigns` DB trigger
+  // (0003_host_user_campaign_invariant.sql) creates the host's grant row
+  // automatically on campaign insert. A manual insert here would duplicate
+  // it and violate the `(user_id, campaign_id)` primary key.
 
   const [player] = await db
     .insert(schema.players)
