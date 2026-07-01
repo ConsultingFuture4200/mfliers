@@ -55,16 +55,44 @@ function createClient(): postgres.Sql {
   });
 }
 
+// The Drizzle client is created **lazily**, on first query — NOT at module
+// import. This is deliberate: `next build` imports every route/page module to
+// collect page data, and any eager `createClient()` here would throw
+// "DATABASE_URL is required" during the build (Vercel's build step has no live
+// DB), breaking deploys. Importing this module is now side-effect-free; the
+// connection is only opened when a query actually runs at request time.
+//
 // In dev, Next.js hot-reloads modules on every save, which would otherwise
 // leak a new connection pool per reload. Cache the client on `globalThis`
 // (dev only) so it survives HMR; in production/serverless each cold start
 // gets a fresh module scope anyway, so the cache is a harmless no-op there.
-const client = globalThis.__dbClient ?? createClient();
-if (process.env.NODE_ENV !== "production") {
-  globalThis.__dbClient = client;
+let memoizedDb: PostgresJsDatabase<typeof schema> | undefined;
+
+function getDb(): PostgresJsDatabase<typeof schema> {
+  if (memoizedDb) return memoizedDb;
+  const client = globalThis.__dbClient ?? createClient();
+  if (process.env.NODE_ENV !== "production") {
+    globalThis.__dbClient = client;
+  }
+  memoizedDb = drizzle(client, { schema });
+  return memoizedDb;
 }
 
-/** The single pooled Drizzle client the rest of the app imports. */
-export const db: PostgresJsDatabase<typeof schema> = drizzle(client, {
-  schema,
-});
+/**
+ * The single pooled Drizzle client the rest of the app imports. It is a thin
+ * lazy proxy: the underlying pool + connection are created on first property
+ * access (i.e. the first real query), not when this module is imported, so a
+ * build with no `DATABASE_URL` reachable never opens (or requires) a connection.
+ */
+export const db: PostgresJsDatabase<typeof schema> = new Proxy(
+  {} as PostgresJsDatabase<typeof schema>,
+  {
+    get(_target, prop, receiver) {
+      const real = getDb();
+      const value = Reflect.get(real as object, prop, receiver);
+      return typeof value === "function"
+        ? (value as (...args: unknown[]) => unknown).bind(real)
+        : value;
+    },
+  },
+);
