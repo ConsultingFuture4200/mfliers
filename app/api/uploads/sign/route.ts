@@ -22,6 +22,18 @@
  * a storage-cost/DoS surface (not a fraud bypass end-to-end:
  * `lib/capture/submit.ts`'s `submitCapture` already independently calls
  * `isActivelyClaimedBy` before a submission can be persisted/paid).
+ *
+ * `idempotencyKey` (batch-5 review, Liotta — T5.3 offline sync): an
+ * optional client-supplied string. When present, `submissionId` is
+ * *derived* deterministically from `(campaignId, idempotencyKey)`
+ * (`lib/capture/submit.ts`'s `deriveOfflineSubmissionId`) instead of a
+ * fresh `randomUUID()`, so `lib/offline/sync.ts` can pass its stable,
+ * client-minted `queueId` and have every retry/concurrent sync of the same
+ * queued item resolve to the same `submissionId` — riding
+ * `submitCapture`'s existing `(campaignId, submissionId)` idempotency
+ * end-to-end instead of minting (and potentially double-paying) a second
+ * submission. The online capture path never sends this field, so its
+ * `submissionId`s are unaffected and remain freshly random per request.
  */
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -31,10 +43,14 @@ import { getMembership } from "@/lib/db/dal/campaign-memberships";
 import { getTarget } from "@/lib/db/dal/targets";
 import { isActivelyClaimedBy } from "@/lib/target/state-machine";
 import { createSignedUploadUrl } from "@/lib/storage/r2";
+import { deriveOfflineSubmissionId } from "@/lib/capture/submit";
 
 interface SignUploadBody {
   campaignId?: unknown;
   targetId?: unknown;
+  /** See module doc comment — optional, sent only by the offline-sync
+   * path (`lib/offline/sync.ts`). */
+  idempotencyKey?: unknown;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -127,7 +143,15 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const submissionId = randomUUID();
+  // Batch-5 review fix (Liotta): an offline-sync retry/concurrent pass for
+  // the *same* queued item must mint the *same* submissionId, or it
+  // defeats submitCapture's (campaignId, submissionId) idempotency and can
+  // double-pay a target — see module doc comment.
+  const idempotencyKey = body.idempotencyKey;
+  const submissionId =
+    typeof idempotencyKey === "string" && idempotencyKey.trim().length > 0
+      ? deriveOfflineSubmissionId(campaignId, idempotencyKey)
+      : randomUUID();
 
   try {
     const signed = await createSignedUploadUrl(campaignId, submissionId);

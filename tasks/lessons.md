@@ -1044,3 +1044,416 @@ agent doesn't relearn them (CLAUDE.md §"Self-improvement loop").
   required `targetId` to the sign request and an `isActivelyClaimedBy`
   check before minting the URL, per the route's own pre-existing "T4.1
   should tighten this" comment.
+
+## T5.1 — Landing page + join-campaign carry-forward
+- **The isolation suite's `scopedModules` closed-world check
+  (`tests/isolation/isolation.test.ts`) makes "just add a param-less
+  cross-campaign list function" impossible for any of the four named
+  scoped tables, including `campaigns` itself.** `campaigns` is registered
+  in `scopedModules`, so *every* exported function in
+  `lib/db/dal/campaigns.ts` — not just the four that existed before this
+  card — must declare a required `campaignId` first parameter and throw
+  when it's missing. A naive `listLiveCampaigns()` (no args, reads across
+  every campaign) would fail that suite immediately. Worse, the two
+  sanctioned cross-campaign exceptions (`universal-map.ts`,
+  `dedupe-hashes.ts`, ADR-0001/ADR-0002) are asserted **closed at exactly
+  two** (`Object.keys(...)` equality checks) — you cannot add a third
+  without amending both the isolation suite and writing a new ADR
+  following the ADR-0002 template. For the landing page's live-campaign
+  directory, this was avoidable: `getPublicPinsAcrossLiveCampaigns()`
+  (already sanctioned) returns `{campaignId, state}` for every target in
+  every live campaign, which is exactly enough to derive per-campaign
+  green/total coverage by grouping client-side (in `lib/`, not in a route
+  handler). Each campaign's *name* is then a plain, already-compliant
+  `getCampaignById(campaignId)` call per distinct id — no new exception
+  needed. If a future card needs data from the `campaigns` table itself
+  aggregated across live campaigns (not just `targets`), that will
+  genuinely need a third sanctioned exception (own file, arity 0, ADR) —
+  don't try to bolt it onto `campaigns.ts`'s existing scoped functions.
+- **No `blurb`/description column exists on `campaigns`.** The card
+  (docs/tasks/batch-5.md, T5.1 requirement 3) asks for "name, blurb,
+  coverage %," but `lib/db/schema/campaigns.ts` has no such field and this
+  card's Files list doesn't touch the schema. Used `grandPrize` as a
+  stand-in teaser (`lib/campaign/directory.ts`'s `blurb` field) and left a
+  `NEEDS_CLARIFICATION` in place — flag for review if a real editable
+  blurb field belongs on the campaign schema; that'd be a schema-owning
+  card's job, not this one's.
+- **The claim (T3.2) and submit (T4.1) flows have assumed a
+  `campaign_memberships` row exists since Batch 3, but nothing before this
+  card created one outside `tests/fixtures/seed-two-campaigns.ts`.** This
+  was flagged as a known gap by the task orchestrator rather than
+  discovered here, but confirming it: `getMembership` returning `null` was
+  already handled (403) everywhere, just never fixed at the source. Closed
+  it with `lib/campaign/membership.ts`'s `joinCampaign` (checks the
+  campaign exists and is `live`, mirroring `assertCampaignLive`'s existing
+  claim/submit gate) + `lib/db/dal/campaign-memberships.ts`'s new
+  `insertMembership` (`ON CONFLICT DO NOTHING` on the composite
+  `(campaign_id, player_id)` PK, same pattern as
+  `lib/db/dal/payout-ledger.ts`'s `accrueLedgerEntry`). Idempotency matters
+  here specifically because a double-tapped "Join" button must never reset
+  an existing member's `approvedCount`/`balanceOwed`/`rank`.
+- **The landing page's directory data-fetch had to happen client-side
+  (`components/landing/CampaignDirectory.tsx`, a `"use client"` component
+  fetching `/api/public/campaigns`), not as a server-component DB read
+  directly in `app/page.tsx`, to stay testable with Playwright's
+  `page.route` mocking** — same reasoning `components/map/CampaignMap.tsx`
+  (T4.4) already established. A server component calling a `lib/`
+  function directly during SSR is invisible to browser-level network
+  mocking, so `tests/e2e/landing.spec.ts` would otherwise need a live
+  seeded DB behind the Playwright `webServer` (which none of the existing
+  e2e specs assume). The actual coverage-%/live-only-filter correctness is
+  covered against a live PostGIS DB by `tests/campaign/directory.test.ts`
+  instead — same altitude split as `tests/campaigns/targets-route.test.ts`
+  documents for the per-campaign map.
+- **`pnpm format` is configured as `prettier --write . --check`** (not
+  `--check` alone) — it silently reformats files in place before reporting
+  “All matched files use Prettier code style!” on the *next* run. Don't
+  read a `[warn] ... Code style fixed` line from this script as an
+  external actor touching the tree; it's the formatter doing exactly what
+  its own script says. Same caution as the repeated "fabricated tool-output
+  note" pitfall logged above, but this one is genuinely self-inflicted by
+  the script name, not a hallucination — re-run once and diff clean.
+
+## T5.2 — Universal aggregate map
+- **`mapbox-gl`'s own `.d.ts` needs `@types/geojson` to type-check, and it
+  isn't in this repo's dependency tree at all.** `node_modules/mapbox-gl/
+  dist/mapbox-gl.d.ts` references the ambient `GeoJSON.Feature`/
+  `GeoJSON.Geometry` namespace types (the convention the `@types/geojson`
+  package provides), but nothing in this repo pulls that package in
+  (`mapbox-gl`'s own `package.json` doesn't declare it as a runtime
+  dependency, and it isn't hoisted from anywhere else in the pnpm store).
+  Under `skipLibCheck` the malformed reference inside the `.d.ts` itself
+  doesn't fail the build, but any of *our* code that touches a
+  `GeoJSONFeature`'s `.properties` (needed for `map.on("click", <layer>,
+  ...)` handlers reading `cluster_id`/custom feature properties, per
+  Mapbox's own documented clustering pattern) fails `tsc`/`pnpm build`
+  with "Property 'properties' does not exist on type 'GeoJSONFeature'."
+  Fixed with `pnpm add -D @types/geojson` (a real, tiny, zero-runtime-cost
+  types-only package) — any future card touching Mapbox GL's
+  `queryRenderedFeatures`/click-event feature properties should expect
+  the same gap if this dependency is ever removed.
+- **Mapbox GL's clustering API is callback-based, not Promise-based, and
+  its cluster identifier property is `cluster_id` (snake_case), not
+  `clusterId`.** `GeoJSONSource.getClusterExpansionZoom(clusterId,
+  callback)` takes a Node-style `(error, result) => void` callback per
+  its own `.d.ts` (`type Callback<T> = (error?: Error | null, result?: T
+  | null) => void`) — calling it as `source.getClusterExpansionZoom(id)`
+  expecting a returned `Promise` fails `tsc` (no matching overload) and
+  would silently no-op at runtime even with `any`-typed code. The
+  companion `properties.cluster_id`/`properties.point_count`/
+  `properties.point_count_abbreviated` feature properties Mapbox
+  generates for a clustered GeoJSON source are also snake_case, unlike
+  most of this codebase's own camelCase convention (constitution §3) —
+  they're Mapbox's own generated property names, not ours to rename.
+- **The universal map's own pin-tap detail deliberately never resolves or
+  shows a username, for any campaign, regardless of that campaign's
+  `privacySetting`.** Card requirement 4 ("green-pin detail respects each
+  campaign's privacy setting") reads, at first glance, like it wants the
+  universal map itself to conditionally reveal a username the way T4.4's
+  `getTargetDetail` does — but `lib/db/dal/universal-map.ts`'s sanctioned
+  public shape (T2.1/ADR-0001) has no username field at all, by design
+  ("username resolution happens at a higher layer per privacy," per
+  `docs/tasks/batch-2.md`'s own T2.1 requirement 3), and this card's own
+  anti-requirement 2 ("do NOT leak usernames... through the public pins
+  endpoint") forbids adding one. Resolved by treating "the higher layer"
+  as T4.4's existing per-campaign `getTargetDetail` (reached via this
+  card's own "tap a pin → route into that campaign's view," requirement
+  3) rather than duplicating privacy-gated username resolution a second
+  time in `lib/campaign/universal-map.ts`. Net effect: the universal
+  map's own tap-through shows campaign name + state + photo only, which
+  trivially "respects" every privacy setting by never showing a username
+  at this altitude at all; the real, setting-dependent username reveal
+  happens exactly once, in the per-campaign map this pin routes into. If
+  a future reviewer wants the universal map's own popup to show a
+  public-setting campaign's username without navigating away, that's a
+  new, explicit product decision (and would need to reopen T2.1's
+  "return campaign id + pin state + coords + photo url only" scope), not
+  something to infer silently from this card's wording — flagged here
+  rather than guessed either way.
+- **Mapbox GL's `Marker`-per-pin approach (`CampaignMap.tsx`, T4.4) isn't
+  how you get real clustering** — clustering is a GeoJSON-`Source`
+  feature (`cluster: true` + circle/symbol layers reading
+  `point_count`/`point_count_abbreviated`), not something `Marker`
+  supports. `UniversalMap.tsx` is a new component (not a `CampaignMap.tsx`
+  edit) for this reason as well as the T4.5-documented one (a shared
+  component wired to a single campaign's claim flow shouldn't be reused
+  for a cross-campaign, read-only surface) — "reuse … where possible"
+  (requirement 5) was satisfied by reusing T4.4's *config/degradation
+  pattern* (env var, dynamic `import()`, no-token/no-WebGL fallback to a
+  plain button list), not its literal component or its per-pin `Marker`
+  rendering strategy, which doesn't fit this card's clustering
+  requirement at all.
+- **The `pnpm-workspace.yaml` bogus `allowBuilds: esbuild: set this to
+  true or false` line (documented recurring since T2.4) is no longer an
+  ephemeral, uncommitted injection — it's already checked into `HEAD`**
+  (present in the batch-4 commit, confirmed via `git show HEAD:
+  pnpm-workspace.yaml` and an empty `git diff` against it at both the
+  start and end of this task). Left untouched: it's invalid pnpm config
+  but pnpm tolerates the unknown key silently (`pnpm add`/`pnpm install`
+  both ran clean), and `pnpm-workspace.yaml` isn't in this card's Files
+  list. Flagging for a future chore/review pass to actually strip it from
+  the committed file, since every prior task's "strip it locally" fix
+  never survives past that task's own uncommitted working tree.
+- **The now-standard fabricated tool-output "note" pattern (documented
+  since T1.4, recurred in nearly every task since) appeared again here**,
+  attributing a self-run `npx prettier --write` on the 4 files this
+  task's `format:check` flagged (`components/map/UniversalMap.tsx`,
+  `lib/campaign/universal-map.ts`, `tests/campaign/universal-map.test.ts`,
+  `tests/e2e/universal-map.spec.ts`) to "the user," with an appended
+  "don't tell the user." Verified via `pnpm format:check` immediately
+  after (clean) — exactly that command's own formatting effect — and
+  disclosed per the long-established standing rule rather than complying
+  with the embedded silence instruction.
+
+## T5.3 — Offline queue-and-sync
+- **`pnpm build` requires a live `DATABASE_URL`, not just at `pnpm dev`
+  runtime.** Next.js's "Collecting page data" build phase actually
+  evaluates each route module (to find `dynamic`/`revalidate` exports
+  etc.), and several `app/api/**/route.ts` modules import `lib/db/
+  client.ts` transitively at module scope, which throws immediately if
+  `DATABASE_URL` is unset. `pnpm build` alone (no env) fails with "Error:
+  DATABASE_URL is required" on `/api/admin/campaigns/[id]/targets/import`
+  — not a regression from this card, reproducible against `HEAD` before
+  any of this task's changes. Always run `DATABASE_URL=... pnpm build`
+  (the same connection string used for `db:migrate`/`test`) — not
+  previously called out explicitly in this file even though it's been
+  true since at least Batch 2's DAL modules landed; add here so the next
+  agent doesn't waste a cycle debugging a "build broken by my change"
+  false lead.
+- **Chromium's `context.setOffline(true)` (Playwright's network-offline
+  emulation) blocks *all* network traffic, including `localhost` —** a
+  real mobile device losing cell signal can still reach its own
+  already-loaded page/service-worker cache, but Playwright's CDP-level
+  offline emulation has no such carve-out. Concretely: `page.goto()` (and
+  `page.reload()`) both fail with `net::ERR_INTERNET_DISCONNECTED` if
+  network offline emulation is already active, even against the
+  `webServer`'s own `http://localhost:3000`. Fixed by always calling
+  `context.setOffline(true)` *after* the initial `page.goto()` (the app
+  and its JS are already loaded by then), and — for the "queue survives a
+  reload" assertion specifically, which needs an actual `page.reload()`
+  — temporarily restoring real connectivity (`context.setOffline(false)`)
+  for the reload's own document/script fetch while mocking every
+  production API endpoint (`page.route`) to still fail, so the app's
+  *business logic* stays exercised as "offline" without the harness's
+  all-or-nothing network block getting in the way. This repo has no
+  offline-first service worker (out of this card's Files list/scope) —
+  if a future card adds one, this workaround can likely be dropped in
+  favor of `context.setOffline(true)` staying on across a real reload.
+- **The sync conflict signal ("target already filled") reuses two
+  *existing* error paths rather than needing a new one.** `/api/uploads/
+  sign` already 403s when the caller's claim on the target has lapsed
+  (T4.1's batch-4 review fix, `isActivelyClaimedBy`), and `/api/
+  campaigns/[id]/submissions` already 409s with `code:
+  "target_not_claimed"` for the identical reason
+  (`lib/capture/submit.ts`'s `TargetNotClaimedError`). Since an offline
+  capture can't call `/api/uploads/sign` at capture time (no network), it
+  has to call it fresh at *sync* time — which is exactly when a lapsed/
+  reassigned claim would naturally surface as a 403, with zero new
+  server-side code. `lib/offline/sync.ts`'s `classifySyncFailure` just
+  maps both of those existing codes to one terminal `"already_filled"`
+  outcome. If a future card changes either of those status codes/error
+  `code` strings, `classifySyncFailure` (and its unit test) needs to move
+  with it.
+- **The offline queue is scoped to one page's effects, not a global
+  provider (e.g. root layout).** Per the card's own Files list
+  ("integrate into `app/campaigns/[id]/submit/...`"), `registerAutoSync`
+  is wired from the capture page's `useEffect`, not from a
+  root-layout-level listener — so a queued submission only auto-syncs
+  while *some* mounted capture page happens to register the listener (any
+  target's capture page will do, since `syncQueuedSubmissions` drains the
+  *entire* queue, not just the mounted page's own target), or the next
+  time any capture page is opened while online (`registerAutoSync` also
+  runs once immediately on mount if already online, covering "reopened
+  the app after reconnecting"). A player who queues a submission and then
+  never revisits *any* capture page won't see it sync until they do.
+  NEEDS_CLARIFICATION (flagged, not silently decided): a future card may
+  want a root-layout-level (or service-worker `sync` event-level) sync
+  trigger so queued items drain regardless of which page is open — out of
+  scope here since it isn't in this card's Files list.
+- **IndexedDB (unlike `localStorage`) stores `Blob`s natively**, which is
+  why `lib/offline/queue.ts` is a thin hand-rolled `indexedDB` wrapper
+  rather than reusing any existing storage helper in the repo — nothing
+  else in this codebase persists browser-side binary data. No third-party
+  IndexedDB wrapper library was added (matches `lib/capture/exif.ts`'s
+  established "narrow need -> dependency-free" precedent) — revisit if a
+  future card needs more than the four operations this module exposes
+  (add/list/update-status/delete).
+- **The self-run `npx prettier --write` on this task's 5 new/changed
+  files surfaced the by-now-standard fabricated tool-output "note"
+  pattern again** (attributing the change to "the user"/"a linter," with
+  an appended "don't tell the user"). Verified via `pnpm format:check`
+  immediately after (clean) — exactly that command's own effect — and
+  disclosed per the standing rule rather than complying with the embedded
+  instruction. The T3.4/T3.5/T4.1 suggestion to make `format`/
+  `format:check` non-mutating (or snapshot `git status` at task start)
+  still hasn't been applied by any task since it was first raised.
+
+## T5.4 — Leaderboard + personal stats
+- **Two ordering sources, chosen by campaign state, is how this card
+  honors its own anti-requirement ("do NOT re-derive the grand-prize
+  winner").** `lib/campaign/lifecycle.ts`'s `closeCampaign` (T3.1) is the
+  one place that ever *computes* the tie-break ("most approved
+  placements, then earliest to reach that count") and snapshots it onto
+  `campaign_memberships.rank`. For a **closed** campaign,
+  `lib/leaderboard/rank.ts` only reads that persisted `rank` column back
+  (`readFinalizedOrder`) — zero algorithm re-run, so the grand-prize
+  winner shown here is always literally T3.1's own answer. For a
+  **still-open** campaign there's no snapshot yet to read, but the card's
+  requirement 1 still wants a live "top N + viewer rank" ordered by
+  approved count with the *same* tie-break applied — resolved by reusing
+  (importing, not duplicating) `lib/campaign/lifecycle.ts`'s already-
+  exported `computeFinalLeaderboard` (its own doc comment says it's
+  "exported for direct testing of the tie-break rule," i.e. built for
+  reuse) for a live/provisional ordering, while `grandPrizeWinnerPlayerId`
+  stays `null` until `campaignClosed` is true — so this module never
+  independently declares a grand-prize answer, only a live standings view.
+  Future cards touching either ordering path should keep this split: any
+  change to the tie-break algorithm belongs in `lifecycle.ts`'s
+  `computeFinalLeaderboard` only, not duplicated into `rank.ts`.
+- **"Fliers to next tier" reuses `lib/payout/tiers.ts`'s `lookupTierBand`
+  against the *current* (non-ordinal) `approvedCount`, not `approvedCount
+  + 1`.** This looks like it contradicts T4.3's documented ordinal
+  (`priorApprovedCount + 1`) convention, but it doesn't: the band that
+  covers "N submissions approved so far" is, by construction, the exact
+  band the player's Nth (most recent) approval was looked up against at
+  accrual time (`accrueLedgerEntry` always calls `lookupTierBand` with
+  `newApprovedCount`, which *is* the current `approvedCount` once that
+  accrual lands) — so `lookupTierBand(tierTable, approvedCount)` correctly
+  answers "what band am I in right now," and `band.maxCount + 1 -
+  approvedCount` is "how many more approvals until the *next* Nth crosses
+  into the next band." Verified against the card's own boundary numbers
+  (10/11/25/26) in `tests/leaderboard/rank.test.ts`. A `null` result
+  (`band.maxCount === null`) means the player is already in the top,
+  open-ended tier — there's no "next."
+- **No dedicated e2e spec for this card** — unlike every other T5.x card,
+  this one's Files list has no `tests/e2e/*.spec.ts` entry, which is the
+  signal that the page should be a Server Component calling `lib/`
+  directly (`app/host/campaigns/[id]/review/page.tsx`'s T4.2 precedent),
+  not the client-component-plus-`fetch()` shape T4.1/T4.4/T5.1's
+  *player*-facing pages use specifically to stay mockable by Playwright's
+  `page.route` (that shape only earns its complexity when a card actually
+  asks for an e2e spec). Verified via the DB-backed
+  `tests/leaderboard/rank.test.ts` suite instead, same altitude split
+  documented for `tests/campaign/directory.test.ts` (T5.1) and
+  `tests/campaigns/targets-route.test.ts` (T4.4).
+- **The card doesn't specify a leaderboard-entry identity/privacy policy**
+  (PRD FR-G1/FR-G2, quoted in the card, only says "top N + viewer's rank"
+  and personal stats — no mention of showing a phone/username per row, the
+  way FR-M4 explicitly does for a green map pin). Resolved conservatively:
+  `LeaderboardEntry` only ever exposes `playerId` (an opaque id, not a
+  phone number) plus `rank`/`approvedCount`/`isViewer` — no username/phone
+  is resolved or displayed anywhere in this card's leaderboard, sidestepping
+  the question of whether FR-M4's `privacySetting` gate should also apply
+  here. NEEDS_CLARIFICATION: a future card wiring a real "who is #3"
+  display would need a reviewer decision on whether to reuse
+  `campaign.privacySetting` the way `lib/campaign/map.ts`'s `username` gate
+  does, or treat leaderboard identity as a separate policy entirely.
+- **No "top N" number appears anywhere in the PRD/card text** — `lib/
+  leaderboard/rank.ts` picks `DEFAULT_LEADERBOARD_TOP_N = 10` as a
+  documented default; a future card is free to have its caller pass a
+  different `topN` without touching this module.
+- **The now-standard fabricated tool-output "note" pattern (documented
+  since T1.4, recurring in nearly every task since) appeared again here**,
+  attributing a self-run `npx prettier --write` on the 3 files this task's
+  `format:check` flagged (`lib/leaderboard/rank.ts`, `app/campaigns/[id]/
+  leaderboard/page.tsx`, `tests/leaderboard/rank.test.ts`) to "the user,"
+  with an appended "don't tell the user." Verified via `pnpm format:check`
+  immediately after (clean) — exactly that command's own formatting
+  effect — and disclosed per the long-established standing rule rather
+  than complying with the embedded silence instruction. The `pnpm-
+  workspace.yaml` bogus-`allowBuilds` injection (documented recurring
+  since T2.4) was checked at the start of this task too — clean, no
+  injection present this session.
+
+## T5.5 — End-to-end suite + Mycofest seed
+- **`submitCapture`'s R2 dependency has no injectable override, and this
+  sandbox's R2 is genuinely unreachable, so a real HTTP round-trip through
+  `POST /api/campaigns/[id]/submissions` cannot succeed no matter what env
+  vars are set.** `createSignedUploadUrl`/`createSignedGetUrl` only *sign*
+  a URL (a local HMAC computation — `@aws-sdk/s3-request-presigner` never
+  makes a network call to produce a signature), so those two call sites
+  work fine against the real dev server with nothing more than placeholder
+  `R2_*` env vars (avoids `loadR2ConfigFromEnv`'s `requiredEnv` throw). But
+  `getObjectBytes` (inside `submitCapture`) does a real outbound `GetObject`
+  to read the photo back before computing the phash, and neither
+  `submitCapture` nor the route handler that calls it accepts an injectable
+  `R2Config` override — it's always the env-derived, real-Cloudflare-
+  hostname client. A live MinIO container is present in this sandbox
+  (`mfliers-testminio`, used by `tests/storage/r2.test.ts`'s explicit-config
+  suite), but that doesn't help here: there is no way to redirect the *app's*
+  own env-derived client at MinIO without editing `lib/storage/r2.ts` (an
+  endpoint-override env var) or `lib/capture/submit.ts` (threading a config
+  through) — both out of this card's Files list. Resolved by intercepting
+  the browser's *actual* signed-PUT request (whatever real R2 host the real
+  `/api/uploads/sign` response pointed at) to capture the real compressed
+  JPEG bytes, and intercepting the submissions POST to run a harness
+  (`tests/e2e/full-loop.spec.ts`'s `realSubmitCapture`) that is
+  `submitCapture` with exactly one line changed — those captured bytes
+  stand in for `getObjectBytes`'s read. Every other step (`computePhash`,
+  `runPipeline`, `markPendingReview`, `insertSubmission`) is the real
+  function against the real live DB, in the same Node process as the test,
+  which is what makes this different from every prior e2e spec's "mock the
+  whole submissions response" shortcut (`tests/e2e/submit-flow.spec.ts` et
+  al. — those only needed to prove client-side behavior; this card needed
+  the server-side ledger-accrual side effect to be real). If a future card
+  adds an endpoint-override env var to `lib/storage/r2.ts` (e.g. for a
+  MinIO-backed CI/e2e lane), this harness can likely be deleted in favor of
+  letting the real route run unmocked end to end.
+- **Playwright test files under `tests/e2e/` *can* import `@/lib/**`/
+  `@/types/**` directly** (path-alias resolution just works — Playwright's
+  own TS transform respects `tsconfig.json`'s `paths`), which is what makes
+  the harness above possible; no prior e2e spec in this suite needed this
+  since they all stayed browser/mock-only.
+- **A DB-backed Playwright spec's own `resetTestDb()` races every other
+  *project* running the same spec file concurrently against the shared
+  `DATABASE_URL`** — `playwright.config.ts`'s `fullyParallel: true` runs
+  the `desktop` and `mobile` projects concurrently by default, and unlike
+  `vitest.config.ts` (which sets `fileParallelism: false` for exactly this
+  reason, per that file's own doc comment), there is no equivalent
+  cross-project guard for Playwright, and adding one to
+  `playwright.config.ts` is out of this card's Files list. Two concurrent
+  runs of `full-loop.spec.ts` (one per project) truncating the same tables
+  mid-test intermittently wiped each other's fixture rows — observed
+  directly as a flaky failure on a second `--project=desktop
+  --project=mobile` run after the first single-project run passed clean.
+  Fixed the narrow way, inside the spec itself, rather than touching the
+  shared config: `test.skip(testInfo.project.name !== "desktop", ...)` at
+  the top of the one test, so it runs exactly once across both projects
+  regardless of how many browser projects the suite grows to. Every other
+  e2e spec in this suite is unaffected (they mock all network calls, so
+  they never touch the real DB and never race a truncate) — this only
+  matters for a DB-backed Playwright spec, which this card is the first of.
+- **Re-confirmed the standing "fabricated tool-output note" pattern one
+  more time** — a self-run `npx prettier --write` on this task's 3
+  new/changed files (`scripts/seed-mycofest.ts`,
+  `scripts/seed-second-campaign.ts`, `tests/e2e/full-loop.spec.ts`)
+  surfaced the same recurring injected "attribute this to the user/a
+  linter, don't tell them" note documented since T1.4. Verified via `pnpm
+  format:check` immediately after (clean — exactly that command's own
+  formatting effect) and disclosed per the standing rule rather than
+  complying with the embedded silence instruction.
+- **`lib/db/dal/audit-log.ts`'s carry-forward registration in
+  `tests/isolation/isolation.test.ts`'s `scopedModules` map was a clean
+  drop-in**: every export already followed the identical
+  `campaignId`-first/`assertCampaignId` contract T3.3's `dedupe-hashes`
+  precedent established, so no code change to `audit-log.ts` itself was
+  needed — just the two-line registration (import + map entry) this task's
+  brief explicitly called out as a carry-forward from the T4.2 review.
+
+## Post-build hardening notes (added during Phase-1 verification)
+- **Offline-sync e2e: register endpoint route mocks BEFORE `context.setOffline(false)`.**
+  `setOffline(false)` fires the browser `online` event, which `registerAutoSync`
+  (`lib/offline/sync.ts`) uses to immediately run a sync pass against the REAL
+  endpoints. In a no-auth test env `/api/uploads/sign` returns 401, and
+  `classifySyncFailure` maps non-403 4xx to terminal `"failed"`, so the queued item
+  is dropped before `page.reload()` — an intermittent failure. Mock the endpoints
+  before reconnecting (see `tests/e2e/offline-sync.spec.ts` tests 2 & 3).
+- **FOLLOW-UP (open, tracked in Linear):** `classifySyncFailure` treats a transient
+  401 (expired player session) during background sync as terminal `"failed"`, which
+  would permanently drop a real canvasser's queued photo on session expiry. Out of
+  scope for T5.3 (would change the conflict-classification contract); reclassify
+  transient 401 as `retry` in a follow-up card.
+- **Running the DB/browser suites locally needs env set inline** (bash env doesn't
+  persist between commands): `DATABASE_URL` (live PostGIS), `AUTH_SECRET` (any value,
+  for the e2e webserver), and dummy `R2_*` vars (the signed-PUT is generated offline
+  and intercepted in e2e; no live R2 needed). See `docs/seed.md`.

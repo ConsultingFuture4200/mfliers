@@ -61,6 +61,46 @@ export async function getMembership(
 }
 
 /**
+ * Creates the membership row for `playerId` joining `campaignId` (T5.1's
+ * "join campaign" action — PRD FR-L5's "join"; also the carry-forward gap
+ * flagged since T3.2/T4.1: `claim`/`submitCapture` both require an
+ * existing `campaign_memberships` row, but nothing before this card
+ * created one outside a seed script). Idempotent via `ON CONFLICT DO
+ * NOTHING` on the composite `(campaign_id, player_id)` primary key, so a
+ * repeated join (double-tap, retried request) never errors and never
+ * resets an existing member's `approvedCount`/`balanceOwed`/`rank` back to
+ * their defaults. `lib/campaign/membership.ts` is the only intended
+ * caller and is responsible for checking the campaign exists and is
+ * `live` before calling this — this function performs the write only.
+ */
+export async function insertMembership(
+  campaignId: string,
+  playerId: string,
+): Promise<CampaignMembership> {
+  assertCampaignId(campaignId, "insertMembership");
+  const [inserted] = await db
+    .insert(campaignMemberships)
+    .values({ campaignId, playerId })
+    .onConflictDoNothing({
+      target: [campaignMemberships.campaignId, campaignMemberships.playerId],
+    })
+    .returning();
+  if (inserted) return toDomain(inserted);
+
+  // Lost the race (or this is a genuine repeat join) — the row already
+  // exists. Re-read and return it rather than treating the conflict as an
+  // error, per the idempotency contract above.
+  const existing = await getMembership(campaignId, playerId);
+  if (!existing) {
+    throw new Error(
+      `insertMembership: conflict on (${campaignId}, ${playerId}) but no ` +
+        "row found on re-read.",
+    );
+  }
+  return existing;
+}
+
+/**
  * Writes a final leaderboard-position `rank` onto each named player's
  * membership row (T3.1 requirement 4: campaign close "snapshots final
  * leaderboard ordering"). `lib/campaign/lifecycle.ts` computes `rank`

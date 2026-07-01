@@ -15,8 +15,20 @@
  * needs a stable per-pin identity for interaction/keys; everything else
  * genuinely private (host identity, player identity, ledger/budget data,
  * claim ownership) is intentionally omitted.
+ *
+ * `getLiveCampaignCoverageCounts` (T5.1 / Liotta review, batch 5) is the
+ * same sanctioned exception's second, narrower entry point: the public
+ * landing directory (`lib/campaign/directory.ts`) only ever needed a
+ * per-campaign green/total *count*, not the full pin payload (coords,
+ * photo URLs). The original approach reused `getPublicPinsAcrossLiveCampaigns`
+ * and tallied in application memory — correct, but it shipped every pin row
+ * on the highest-traffic, auth-free, uncached route just to produce a
+ * percentage. This does the counting in Postgres (`GROUP BY` +
+ * `count(*) filter (...)`) and returns one row per live campaign instead of
+ * one row per pin — no new cross-campaign exception, no new ADR, same
+ * `targets` join scoped to `campaigns.state = 'live'`.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { campaigns, submissions, targets } from "@/lib/db/schema";
 import type { TargetState } from "@/types/domain";
@@ -72,4 +84,37 @@ export async function getPublicPinsAcrossLiveCampaigns(): Promise<PublicPin[]> {
     long: row.long,
     photoUrl: row.photoUrl ?? null,
   }));
+}
+
+/** Per-campaign green/total target counts, for every currently-`live`
+ * campaign. See module doc comment: the coverage-% consumer
+ * (`lib/campaign/directory.ts`) only ever needs these two numbers, not a
+ * full pin payload, so this aggregates in SQL rather than reusing
+ * `getPublicPinsAcrossLiveCampaigns` and counting in application memory. */
+export interface LiveCampaignCoverageCount {
+  campaignId: string;
+  total: number;
+  green: number;
+}
+
+/**
+ * Returns `{ campaignId, total, green }` for every currently-`live`
+ * campaign that has at least one target — one row per campaign (not per
+ * pin), computed with `GROUP BY` / `count(*) filter (...)` in Postgres.
+ */
+export async function getLiveCampaignCoverageCounts(): Promise<
+  LiveCampaignCoverageCount[]
+> {
+  const rows = await db
+    .select({
+      campaignId: targets.campaignId,
+      total: sql<number>`count(*)::int`,
+      green: sql<number>`count(*) filter (where ${targets.state} = 'green')::int`,
+    })
+    .from(targets)
+    .innerJoin(campaigns, eq(targets.campaignId, campaigns.id))
+    .where(eq(campaigns.state, "live"))
+    .groupBy(targets.campaignId);
+
+  return rows;
 }

@@ -38,6 +38,7 @@ import * as membershipsDal from "@/lib/db/dal/campaign-memberships";
 import * as ledgerDal from "@/lib/db/dal/payout-ledger";
 import * as universalMapDal from "@/lib/db/dal/universal-map";
 import * as dedupeHashesDal from "@/lib/db/dal/dedupe-hashes";
+import * as auditLogDal from "@/lib/db/dal/audit-log";
 
 /** Amounts (integer cents) seeded into each campaign's ledger below. Chosen
  * to be distinct so a budget-bleed bug (reading the wrong campaign's rows)
@@ -276,6 +277,14 @@ describe.skipIf(!hasTestDatabase())(
         submissions: submissionsDal,
         campaignMemberships: membershipsDal,
         payoutLedger: ledgerDal,
+        // Carry-forward from the T4.2 review (`lib/db/dal/audit-log.ts`'s
+        // own doc comment, flagged in `tasks/lessons.md`): `audit_log`
+        // isn't one of the constitution §3-named four scoped tables, but
+        // every export here already follows the identical
+        // `campaignId`-first contract, so it belongs in this hardcoded
+        // list too — registered here, in this cross-cutting review pass,
+        // rather than by T4.2 itself (T3.3's dedupe-hashes precedent).
+        auditLog: auditLogDal,
       };
 
       for (const [moduleName, mod] of Object.entries(scopedModules)) {
@@ -301,10 +310,20 @@ describe.skipIf(!hasTestDatabase())(
       }
 
       it("universal-map and dedupe-hashes are the two sanctioned exceptions (ADR-0002) — no others exist", () => {
-        expect(Object.keys(universalMapDal)).toEqual([
-          "getPublicPinsAcrossLiveCampaigns",
-        ]);
+        // `getLiveCampaignCoverageCounts` (Liotta batch-5 review) is a
+        // second entry point into the *same* named exception, not a third
+        // one: it's a `GROUP BY` aggregate variant of
+        // `getPublicPinsAcrossLiveCampaigns`, added to this same module so
+        // the public landing directory (`lib/campaign/directory.ts`)
+        // doesn't have to ship every pin row just to count green/total.
+        expect(Object.keys(universalMapDal).sort()).toEqual(
+          [
+            "getPublicPinsAcrossLiveCampaigns",
+            "getLiveCampaignCoverageCounts",
+          ].sort(),
+        );
         expect(universalMapDal.getPublicPinsAcrossLiveCampaigns.length).toBe(0);
+        expect(universalMapDal.getLiveCampaignCoverageCounts.length).toBe(0);
 
         expect(Object.keys(dedupeHashesDal)).toEqual([
           "listAllSubmissionHashes",

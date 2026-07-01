@@ -50,6 +50,7 @@
  * `lib/db/dal/payout-ledger.ts`'s `accrueLedgerEntry`), so a retried
  * dispatch loop never double-pays.
  */
+import { createHash } from "node:crypto";
 import type {
   Campaign,
   Coordinate,
@@ -89,6 +90,59 @@ import {
 import { getObjectBytes, submissionPhotoKey } from "@/lib/storage/r2";
 import { accrue } from "@/lib/payout/ledger";
 import { appendAuditEntry, auditEntryExists } from "@/lib/audit/log";
+
+// ---------------------------------------------------------------------------
+// Offline-sync idempotency (Liotta batch-5 review, T5.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Derives a stable `submissionId` from `(campaignId, idempotencyKey)`
+ * instead of minting a fresh `randomUUID()` — used by `app/api/uploads/
+ * sign/route.ts` when the caller (`lib/offline/sync.ts`'s `syncOne`)
+ * supplies its client-minted, per-queue-item `queueId` as the
+ * `idempotencyKey`.
+ *
+ * Why this exists: the offline queue's sign -> upload -> submit sequence
+ * (this module's `submitCapture`, already idempotent by `submissionId` —
+ * see module doc comment) previously had no *stable* `submissionId` across
+ * retries, because `/api/uploads/sign` minted a fresh `randomUUID()` on
+ * every call. A queued item whose ack was lost after a successful submit
+ * (dead zone) would resync on the next `online` event, mint a *second*
+ * `submissionId` for the same target, and — since nothing enforces
+ * one-submission-per-target at the DB level — accrue the payout twice
+ * (constitution §3's anti-double-pay, this card's T5.3 anti-requirement).
+ * Deriving the id from the queue item's own stable identity closes that
+ * gap: every retry of the same queued item reuses the same
+ * `submissionId`, so it rides `submitCapture`'s existing
+ * `(campaignId, submissionId)` idempotency end-to-end. Deterministic
+ * (not random) so two concurrent sync passes for the same queued item
+ * independently derive the identical id without coordinating.
+ *
+ * Not cryptographically sensitive — this only needs to be stable and
+ * collision-resistant per `(campaignId, idempotencyKey)`, not
+ * unguessable, since `submissionId` was never a secret (it's echoed back
+ * to the client in the sign response). Formatted as a v5-shaped UUID
+ * (version/variant bits set) purely because `submissions.id` is a
+ * Postgres `uuid` column.
+ */
+export function deriveOfflineSubmissionId(
+  campaignId: string,
+  idempotencyKey: string,
+): string {
+  const hash = createHash("sha256")
+    .update(`offline-sync:${campaignId}:${idempotencyKey}`)
+    .digest();
+  hash[6] = (hash[6]! & 0x0f) | 0x50; // version 5
+  hash[8] = (hash[8]! & 0x3f) | 0x80; // variant (RFC 4122)
+  const hex = hash.subarray(0, 16).toString("hex");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join("-");
+}
 
 // ---------------------------------------------------------------------------
 // Typed errors (constitution §3: "server logic ... throws typed errors" —

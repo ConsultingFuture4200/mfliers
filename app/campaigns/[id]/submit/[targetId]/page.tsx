@@ -21,11 +21,36 @@
  * The measured duration is rendered on the confirmation screen with a
  * `data-testid` so `tests/e2e/submit-flow.spec.ts` can assert a value was
  * recorded (card acceptance criterion 5).
+ *
+ * Offline queue-and-sync (T5.3): capture itself never blocks on
+ * connectivity (card anti-requirement 3) — compression and EXIF parsing
+ * are local. Only the network leg (sign -> upload -> submit) is
+ * connectivity-gated: `isOffline()` (`lib/offline/sync.ts`) short-circuits
+ * straight to `enqueueSubmission` (`lib/offline/queue.ts`) instead of
+ * hitting the network, and the page shows a "queued" confirmation rather
+ * than the real fraud-pipeline decision. `registerAutoSync` posts anything
+ * queued as soon as the browser reports `online` (or immediately, if
+ * already online on mount — covers a reload after reconnecting); this page
+ * listens for its `OFFLINE_SYNC_EVENT` to refresh its own state if the sync
+ * pass resolves *this* target's queued item while the page happens to
+ * still be mounted. `findQueuedSubmissionForTarget` restores the
+ * queued/already-filled state on reload (card requirement 5 — the queue
+ * persists in IndexedDB, not memory).
  */
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { parseJpegExif } from "@/lib/capture/exif";
 import { compressImage } from "@/lib/capture/compress";
+import {
+  enqueueSubmission,
+  findQueuedSubmissionForTarget,
+} from "@/lib/offline/queue";
+import {
+  isOffline,
+  OFFLINE_SYNC_EVENT,
+  registerAutoSync,
+  type SyncSummary,
+} from "@/lib/offline/sync";
 
 interface PageParams {
   id: string;
@@ -42,6 +67,9 @@ type Phase =
   | "ready"
   | "processing"
   | "done"
+  | "queued"
+  | "queued-synced"
+  | "already-filled"
   | "error";
 
 interface ConfirmationState {
@@ -100,11 +128,18 @@ export default function SubmitCapturePage({ params }: PageProps) {
     try {
       const pos = await getCurrentPosition();
       setPosition(pos);
-      setPhase("ready");
+      // Functional update, guarded: the offline-queue "restore" effect
+      // (below) resolves from IndexedDB concurrently and may already have
+      // moved `phase` to `"queued"`/`"already-filled"` for this exact
+      // target — geolocation resolving afterward must not stomp that
+      // terminal state back to the fresh-capture screen.
+      setPhase((prev) => (prev === "requesting-location" ? "ready" : prev));
     } catch {
       // Requirement 3: GPS denial hard-blocks submission with a clear
       // message — never silently proceeds without device GPS.
-      setPhase("location-denied");
+      setPhase((prev) =>
+        prev === "requesting-location" ? "location-denied" : prev,
+      );
     }
   }, []);
 
@@ -127,6 +162,62 @@ export default function SubmitCapturePage({ params }: PageProps) {
     void attemptGetLocation();
   }, [attemptGetLocation]);
 
+  // Offline queue (T5.3), part 1: restore a "queued"/"already-filled" state
+  // left over from a previous mount of *this exact target* (card
+  // requirement 5 — the queue survives a reload; without this check, a
+  // reload after an offline capture would silently drop back to the
+  // camera-ready screen even though a submission is sitting in IndexedDB).
+  useEffect(() => {
+    let cancelled = false;
+    void findQueuedSubmissionForTarget(campaignId, targetId).then(
+      (existing) => {
+        if (cancelled || !existing) return;
+        if (existing.status === "already_filled") {
+          setPhase("already-filled");
+        } else if (existing.status === "queued") {
+          // Batch-5 review fix (Linus): "syncing" is no longer a
+          // persisted status (see `QueuedSubmissionStatus`'s doc
+          // comment) — an in-flight item is still "queued" in
+          // IndexedDB, so this single branch covers both "never
+          // synced yet" and "a sync pass is currently working on it".
+          setPhase("queued");
+        }
+        // status "failed": leave the normal capture flow to load below —
+        // nothing terminal to restore, and the player should be able to
+        // just try again.
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [campaignId, targetId]);
+
+  // Offline queue (T5.3), part 2: sync whatever's queued as soon as the
+  // browser reports `online` (or immediately, if already online — covers a
+  // reload after reconnecting while the app was closed), and react if
+  // *this* target's queued item is the one a sync pass just resolved.
+  useEffect(() => {
+    function handleSyncEvent(event: Event) {
+      const { detail } = event as CustomEvent<SyncSummary>;
+      const match = detail.results.find(
+        (r) => r.campaignId === campaignId && r.targetId === targetId,
+      );
+      if (!match) return;
+      if (match.outcome === "already_filled") {
+        setPhase("already-filled");
+      } else if (match.outcome === "synced") {
+        setPhase("queued-synced");
+      }
+      // "failed": nothing to restore here either — same reasoning as above.
+    }
+    window.addEventListener(OFFLINE_SYNC_EVENT, handleSyncEvent);
+    const unregisterAutoSync = registerAutoSync();
+    return () => {
+      window.removeEventListener(OFFLINE_SYNC_EVENT, handleSyncEvent);
+      unregisterAutoSync();
+    };
+  }, [campaignId, targetId]);
+
   const submitPhoto = useCallback(
     async (file: File, isGalleryFallback: boolean) => {
       if (!position) {
@@ -137,11 +228,32 @@ export default function SubmitCapturePage({ params }: PageProps) {
       setError(null);
 
       try {
+        // Capture never blocks on connectivity (card anti-requirement 3):
+        // compression/EXIF parsing run regardless, and only the network leg
+        // below branches on `isOffline()`.
         const [rawBytes, compressedBlob] = await Promise.all([
           readAsArrayBuffer(file),
           compressImage(file),
         ]);
         const exif = parseJpegExif(rawBytes);
+
+        if (isOffline()) {
+          await enqueueSubmission({
+            campaignId,
+            targetId,
+            photoBlob: compressedBlob,
+            deviceGps: {
+              lat: position.coords.latitude,
+              long: position.coords.longitude,
+            },
+            exifGps: exif.gps,
+            exifTs: exif.timestamp ? exif.timestamp.toISOString() : null,
+            clientTs: new Date().toISOString(),
+            isGalleryFallback,
+          });
+          setPhase("queued");
+          return;
+        }
 
         const signRes = await fetch("/api/uploads/sign", {
           method: "POST",
@@ -227,6 +339,54 @@ export default function SubmitCapturePage({ params }: PageProps) {
           location. Please allow location access to submit a photo.
         </p>
         <Button onClick={handleRetryLocation}>Try again</Button>
+      </main>
+    );
+  }
+
+  if (phase === "queued") {
+    return (
+      <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
+        <h1 className="text-lg font-semibold">
+          Queued — will submit when online
+        </h1>
+        <p
+          data-testid="offline-queued-message"
+          className="text-sm text-muted-foreground"
+        >
+          You&apos;re offline. Your photo is saved on this device and will be
+          submitted automatically as soon as you&apos;re back online.
+        </p>
+      </main>
+    );
+  }
+
+  if (phase === "queued-synced") {
+    return (
+      <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
+        <h1 className="text-lg font-semibold">Submitted</h1>
+        <p
+          data-testid="offline-synced-message"
+          className="text-sm text-muted-foreground"
+        >
+          Your queued flier photo was submitted now that you&apos;re back
+          online, and is in the normal review flow.
+        </p>
+      </main>
+    );
+  }
+
+  if (phase === "already-filled") {
+    return (
+      <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
+        <h1 className="text-lg font-semibold">Target already filled</h1>
+        <p
+          data-testid="offline-already-filled-message"
+          className="text-sm text-muted-foreground"
+        >
+          While you were offline, this target was filled or closed by someone
+          else. Your queued photo was not submitted or paid — please claim a
+          different target.
+        </p>
       </main>
     );
   }

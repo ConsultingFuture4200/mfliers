@@ -188,8 +188,131 @@ acceptance criteria are met. Two review gates (T2.1, T3.3) block their dependent
       nothing transaction was actually intended.)
 
 ## Batch 5 — Integration
-- [ ] T5.1 — Landing page
-- [ ] T5.2 — Universal aggregate map
-- [ ] T5.3 — Offline queue-and-sync
-- [ ] T5.4 — Leaderboard + personal stats
-- [ ] T5.5 — End-to-end suite + Mycofest seed
+- [x] T5.1 — Landing page (public directory + join flow; 80/80 new tests
+      green against a live PostGIS DB across `tests/campaign/directory.test.ts`,
+      `tests/campaign/join.test.ts`, `tests/campaigns/join-route.test.ts`,
+      `tests/campaigns/public-campaigns-route.test.ts`, plus
+      `tests/isolation` re-run to confirm the isolation gate still holds
+      (still exactly 2 sanctioned cross-campaign exceptions); full vitest
+      suite 278/286 green (8 pre-existing skips, none new); 9/9 new
+      Playwright specs green (`tests/e2e/landing.spec.ts`), full e2e suite
+      22/22 green; `pnpm lint`/`build`/`format --check` clean. Carry-forward
+      closed: added `lib/campaign/membership.ts`'s `joinCampaign` +
+      `lib/db/dal/campaign-memberships.ts`'s `insertMembership` (idempotent
+      `ON CONFLICT DO NOTHING`) so claim/submit's membership-row assumption
+      is finally satisfied outside seed scripts. Coverage % is computed by
+      grouping the existing sanctioned universal-map read
+      (`getPublicPinsAcrossLiveCampaigns`) by campaign, rather than adding a
+      third cross-campaign DAL exception. NEEDS_CLARIFICATION (see
+      lessons.md): no `blurb` column exists on `campaigns`; used
+      `grandPrize` as a stand-in teaser line.)
+- [x] T5.2 — Universal aggregate map (`lib/campaign/universal-map.ts`,
+      `app/api/public/pins/route.ts`, `app/map/page.tsx`,
+      `components/map/UniversalMap.tsx`; new DB-backed
+      `tests/campaign/universal-map.test.ts` 3/3 green against a live
+      PostGIS DB — pins from ≥2 live campaigns annotated with campaign
+      name, draft/closed campaigns excluded, no username/ledger/budget
+      field ever present; full vitest suite 281/289 green (8 pre-existing
+      skips, none new); `tests/isolation` unaffected (still exactly 2
+      sanctioned cross-campaign exceptions — this card only *consumes*
+      the existing `universal-map.ts` DAL read, adds no new one); new
+      `tests/e2e/universal-map.spec.ts` 4/4 green x2 projects (8/8),
+      full e2e suite 52/52 green including the pre-existing
+      `landing.spec.ts` `/map`-link test; `pnpm lint`/`build`/
+      `format:check` clean. Real Mapbox GL clustering (GeoJSON source,
+      `cluster: true`, `getClusterExpansionZoom`) implemented per
+      requirement 2 but unverified-here — no live `NEXT_PUBLIC_MAPBOX_TOKEN`/
+      WebGL in this sandbox, same constraint as T4.4; automated coverage
+      runs the no-Mapbox `PinFallbackList` fallback instead, same pattern
+      as `tests/e2e/campaign-map.spec.ts`. Added `@types/geojson` as a
+      devDependency — required for `mapbox-gl`'s own `.d.ts` to type-check
+      (see lessons.md). Username is never exposed by this map, for any
+      campaign's privacy setting — see lessons.md and the module doc
+      comments for why that's the correct split with T4.4's
+      `getTargetDetail`, not a shortcut.)
+- [x] T5.3 — Offline queue-and-sync (`lib/offline/queue.ts` — IndexedDB-backed
+      queue, `enqueueSubmission`/`listQueuedSubmissions`/
+      `findQueuedSubmissionForTarget`/`updateQueuedSubmissionStatus`/
+      `deleteQueuedSubmission`; `lib/offline/sync.ts` — `syncQueuedSubmissions`
+      replays sign -> upload -> submit in queued order, `classifySyncFailure`
+      maps the sign step's 403/submit step's 409 `target_not_claimed` to a
+      terminal `"already_filled"` outcome, `registerAutoSync` wires a `window`
+      `online` listener + dispatches `OFFLINE_SYNC_EVENT`; integrated into
+      `app/campaigns/[id]/submit/[targetId]/page.tsx` — offline capture
+      enqueues instead of hitting the network, "queued"/"already-filled"
+      state is restored on mount from IndexedDB, `OFFLINE_SYNC_EVENT` updates
+      the page live if a mounted target's item resolves. Pure classifier
+      unit-tested (`tests/offline/sync.test.ts`, 5/5 green, Vitest `node` env
+      — the rest of both modules needs a real browser, per module doc
+      comments); full new Playwright suite `tests/e2e/offline-sync.spec.ts`
+      3/3 green x2 projects (6/6) against real Chromium IndexedDB +
+      network-offline emulation; full e2e suite 29/29 green (desktop); full
+      vitest suite 286/294 green (8 pre-existing skips, none new);
+      `pnpm lint`/`build`/`format:check` clean (`build` run with
+      `DATABASE_URL` set — see lessons.md, pre-existing constraint, not
+      introduced here). See lessons.md for the Chromium
+      `context.setOffline`-blocks-localhost pitfall this card's e2e spec
+      had to work around, and the "no service worker" scope note.)
+- [x] T5.4 — Leaderboard + personal stats (`lib/leaderboard/rank.ts` —
+      `buildLeaderboardView`/`computePersonalStats` pure functions +
+      `getLeaderboardForCampaign`/`getPersonalStatsForCampaign` DB-backed
+      reads; `app/campaigns/[id]/leaderboard/page.tsx` (Server Component,
+      T4.2 precedent — this card's Files list has no e2e spec, so no
+      client+fetch shape needed) + `components/stats/PersonalStats.tsx`.
+      12/12 new tests green against a live PostGIS DB
+      (`tests/leaderboard/rank.test.ts` — live tie-break ordering, closed-
+      campaign ordering read from the persisted `rank` column, viewer-rank
+      outside the top N, tier-boundary "fliers to next tier"/"$ earned" at
+      10/11/25/26, grand-prize winner matches `closeCampaign`'s own
+      result, cross-campaign scoping, not-found); full vitest suite
+      298/306 green (8 pre-existing skips, none new); `pnpm lint`/`build`/
+      `format:check` clean (`build` run with `DATABASE_URL` set per the
+      T5.3-documented constraint). Two ordering sources split by campaign
+      state (persisted `rank` when closed vs. a reused, not duplicated,
+      `computeFinalLeaderboard` from T3.1's `lifecycle.ts` while still
+      open) is how this satisfies the "do NOT re-derive the grand-prize
+      winner" anti-requirement while still meeting requirement 1's live
+      tie-break ordering — see lessons.md. NEEDS_CLARIFICATION: no
+      leaderboard-entry identity/privacy policy is specified by the card;
+      `LeaderboardEntry` exposes only an opaque `playerId`, never a
+      phone/username, sidestepping whether FR-M4's `privacySetting` gate
+      should extend to the leaderboard — flagged for review.)
+- [x] T5.5 — End-to-end suite + Mycofest seed (`tests/e2e/full-loop.spec.ts` —
+      1/1 real end-to-end pass (desktop project; skipped on mobile to avoid
+      racing another project's concurrent `resetTestDb()` against the same
+      shared DB — see the spec's own doc comment/lessons.md) against a live
+      PostGIS DB: real claim (real map UI, real claim route), real
+      client-side capture pipeline (real EXIF/compression/GPS, real
+      submit-duration instrumentation asserted > 0, EC-2), real host
+      review-queue UI + real approve decision route, then real DB
+      assertions that the target flipped `amber -> green` and exactly one
+      `payout_ledger` row exists for that submission with `amountCents >
+      0`/`unpayable: false` (EC-1) — ledger-accrual assertion NOT skipped,
+      per anti-requirement. R2 (unavailable in this sandbox, per the task
+      brief) is the one substitution: the browser's real signed-upload PUT
+      is intercepted to capture the actual compressed JPEG bytes the real
+      client pipeline produced, and the submissions POST is intercepted to
+      run a harness (`realSubmitCapture`) that is `lib/capture/submit.ts`'s
+      `submitCapture` with exactly one line changed (those captured bytes
+      stand in for `getObjectBytes`'s network read) — every fraud-pipeline/
+      target-state/ledger call in between is the real function against the
+      real DB, not a canned response, unlike every prior e2e spec in this
+      suite. Full vitest suite 304/312 (8 pre-existing skips, none new — up
+      from 298 passed, +6 new `audit-log` DAL isolation tests); full e2e
+      suite 59 passed/1 skipped (desktop+mobile together); `pnpm lint`/
+      `build`/`format:check` clean. `scripts/seed-mycofest.ts` (real
+      $1,000/$1.25-$1.75-$2.25 tier table/"2 Mycofest tickets"/admin_only,
+      targets from `data/mycofest-targets.csv` — placeholder Pacific
+      County, WA coords) and `scripts/seed-second-campaign.ts` (a second,
+      generic live campaign, EC-4) both re-run successfully against a
+      freshly truncated live DB during this task, producing 2 live
+      campaigns with the documented config (verified via a direct DB
+      query); `docs/seed.md` documents the exact repeatable sequence.
+      Carry-forward closed: `lib/db/dal/audit-log.ts` is now registered in
+      `tests/isolation/isolation.test.ts`'s `scopedModules` map. Mycofest
+      values live only in `scripts/seed-mycofest.ts`'s own config literal +
+      the CSV — never hard-coded into `app/`/`lib/`. Real Mapbox/Twilio/R2
+      rendering remain out of scope for this card the same way prior
+      batch-4/5 cards marked them `unverified-here`; this card's own R2
+      substitution is documented in the spec file's own doc comment, not
+      silently faked. See lessons.md for the full design rationale.)

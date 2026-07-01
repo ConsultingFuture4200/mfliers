@@ -37,6 +37,7 @@ vi.mock("@/lib/fraud/dedupe", async () => {
 import { getObjectBytes } from "@/lib/storage/r2";
 import { computePhash } from "@/lib/fraud/dedupe";
 import {
+  deriveOfflineSubmissionId,
   PhotoKeyMismatchError,
   submitCapture,
   TargetNotClaimedError,
@@ -47,6 +48,7 @@ import { claim } from "@/lib/target/state-machine";
 import { getTarget } from "@/lib/db/dal/targets";
 import { getSubmission } from "@/lib/db/dal/submissions";
 import { listAuditLog } from "@/lib/audit/log";
+import { listLedgerEntries } from "@/lib/db/dal/payout-ledger";
 import type { Player } from "@/types/domain";
 
 function uniqueHash(): string {
@@ -177,6 +179,56 @@ describe.skipIf(!hasTestDatabase())("submitCapture (T4.1)", () => {
     // row for the same auto-approval.
     const audit = await listAuditLog(seed.campaignA.campaignId);
     expect(audit).toHaveLength(1);
+  });
+
+  it("offline-sync retry (same queueId-derived submissionId) never double-pays a target (Liotta batch-5 review)", async () => {
+    // Simulates the exact scenario the finding describes: a queued
+    // submission syncs, the submit succeeds, but the ack is lost (dead
+    // zone) so the offline queue item stays "queued" and a later sync
+    // pass retries it. `lib/offline/sync.ts` re-requests a signed URL
+    // through `/api/uploads/sign` on every attempt, which now derives the
+    // *same* submissionId from `(campaignId, queueId)` instead of minting
+    // a fresh `randomUUID()` — so this is what a real retry sends to
+    // `submitCapture`.
+    const { seed, player, targetId } = await seedAndClaim();
+    const queueId = "queue-item-offline-1";
+    const submissionId = deriveOfflineSubmissionId(
+      seed.campaignA.campaignId,
+      queueId,
+    );
+    const input = baseInput({
+      targetId,
+      submissionId,
+      photoKey: photoKeyFor(seed.campaignA.campaignId, submissionId),
+      deviceGps: { lat: 46.9, long: -123.8 },
+    });
+
+    const first = await submitCapture(seed.campaignA.campaignId, player, input);
+    // Re-derive independently (as a second sign call would) to prove the
+    // id isn't just being reused by test-code coincidence.
+    const resignedSubmissionId = deriveOfflineSubmissionId(
+      seed.campaignA.campaignId,
+      queueId,
+    );
+    expect(resignedSubmissionId).toBe(submissionId);
+    const retry = await submitCapture(
+      seed.campaignA.campaignId,
+      player,
+      baseInput({
+        ...input,
+        submissionId: resignedSubmissionId,
+        photoKey: photoKeyFor(seed.campaignA.campaignId, resignedSubmissionId),
+      }),
+    );
+
+    expect(retry.decision).toBe(first.decision);
+    expect(retry.runningApprovedTotal).toBe(1); // no double-count
+
+    const ledgerEntries = await listLedgerEntries(seed.campaignA.campaignId);
+    expect(ledgerEntries).toHaveLength(1); // no double-pay
+
+    const audit = await listAuditLog(seed.campaignA.campaignId);
+    expect(audit).toHaveLength(1); // no duplicate approval audit row
   });
 
   it("auto-flags a gallery-fallback submission to needs_review instead of auto-approving", async () => {

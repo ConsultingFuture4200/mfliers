@@ -18,7 +18,7 @@
  * their own DB-/S3-backed suites (`tests/isolation/isolation.test.ts`,
  * `tests/storage/r2.test.ts`).
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/config", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/db/dal/campaigns", () => ({ getCampaignById: vi.fn() }));
@@ -188,5 +188,85 @@ describe("POST /api/uploads/sign", () => {
     );
     expect(res.status).toBe(403);
     expect(createSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  describe("idempotencyKey (Liotta batch-5 review — offline-sync double-pay fix)", () => {
+    beforeEach(() => {
+      vi.mocked(auth).mockResolvedValue({
+        principalType: "player",
+        playerId: PLAYER_ID,
+      } as never);
+      vi.mocked(getCampaignById).mockResolvedValue({
+        id: CAMPAIGN_ID,
+      } as never);
+      vi.mocked(getMembership).mockResolvedValue({
+        campaignId: CAMPAIGN_ID,
+        playerId: PLAYER_ID,
+      } as never);
+      stubActiveClaim();
+      vi.mocked(createSignedUploadUrl).mockImplementation(
+        async (_campaignId, submissionId) =>
+          ({
+            url: "https://example-r2/signed",
+            key: `${CAMPAIGN_ID}/${submissionId}.jpg`,
+            expiresInSeconds: 300,
+          }) as never,
+      );
+    });
+
+    it("mints the same submissionId for two requests sharing an idempotencyKey", async () => {
+      const first = await POST(
+        req({
+          campaignId: CAMPAIGN_ID,
+          targetId: TARGET_ID,
+          idempotencyKey: "queue-item-1",
+        }),
+      );
+      const second = await POST(
+        req({
+          campaignId: CAMPAIGN_ID,
+          targetId: TARGET_ID,
+          idempotencyKey: "queue-item-1",
+        }),
+      );
+
+      const firstBody = await first.json();
+      const secondBody = await second.json();
+      expect(firstBody.submissionId).toBe(secondBody.submissionId);
+    });
+
+    it("mints different submissionIds for different idempotencyKeys", async () => {
+      const first = await POST(
+        req({
+          campaignId: CAMPAIGN_ID,
+          targetId: TARGET_ID,
+          idempotencyKey: "queue-item-1",
+        }),
+      );
+      const second = await POST(
+        req({
+          campaignId: CAMPAIGN_ID,
+          targetId: TARGET_ID,
+          idempotencyKey: "queue-item-2",
+        }),
+      );
+
+      const firstBody = await first.json();
+      const secondBody = await second.json();
+      expect(firstBody.submissionId).not.toBe(secondBody.submissionId);
+    });
+
+    it("mints a fresh random submissionId on each call when no idempotencyKey is sent (online path unaffected)", async () => {
+      const first = await POST(
+        req({ campaignId: CAMPAIGN_ID, targetId: TARGET_ID }),
+      );
+      const second = await POST(
+        req({ campaignId: CAMPAIGN_ID, targetId: TARGET_ID }),
+      );
+
+      const firstBody = await first.json();
+      const secondBody = await second.json();
+      expect(firstBody.submissionId).not.toBe(secondBody.submissionId);
+    });
   });
 });
