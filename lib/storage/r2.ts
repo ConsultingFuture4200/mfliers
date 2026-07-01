@@ -24,8 +24,10 @@
  * reason (importing this module must not throw before env vars are set,
  * e.g. during `pnpm build`'s static analysis pass).
  */
+import { Buffer } from "node:buffer";
 import {
   DeleteObjectsCommand,
+  GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -175,6 +177,68 @@ export async function createSignedUploadUrl(
   });
 
   return { url, key, expiresInSeconds: SIGNED_UPLOAD_URL_TTL_SECONDS };
+}
+
+/** How long a signed GET (read) URL remains valid for (T4.2's host review
+ * queue: long enough for a host to review one queue page without the link
+ * expiring mid-review, short enough that a leaked URL isn't a standing
+ * credential — same "narrow window" reasoning as
+ * `SIGNED_UPLOAD_URL_TTL_SECONDS`, just longer since this is a read, not a
+ * one-shot upload). */
+export const SIGNED_GET_URL_TTL_SECONDS = 15 * 60;
+
+/**
+ * Issues a short-lived signed GET URL for `${campaignId}/${submissionId}.jpg`
+ * (T4.2 card requirement 2: the review queue card renders the submission's
+ * photo). Submission photos are private R2 objects — there is no public
+ * bucket URL — so a host-facing UI needs a presigned read link the same
+ * way the capture flow needs a presigned write link. The caller (a route
+ * handler / server component) is responsible for authorizing the request
+ * (`requireCampaignAccess`) before calling this.
+ */
+export async function createSignedGetUrl(
+  campaignId: string,
+  submissionId: string,
+  config?: R2Config,
+): Promise<string> {
+  const client = getR2Client(config);
+  const bucket = resolveBucket(config);
+  const key = submissionPhotoKey(campaignId, submissionId);
+
+  const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+
+  return getSignedUrl(client, command, {
+    expiresIn: SIGNED_GET_URL_TTL_SECONDS,
+  });
+}
+
+/**
+ * Fetches the object at `${campaignId}/${submissionId}.jpg` as a `Buffer`
+ * (T4.1's capture flow: the client uploads the compressed photo directly to
+ * R2 via a signed PUT — this server never sees those bytes in-flight — so
+ * the submit handler needs to read them back to compute the server-side
+ * perceptual hash, `lib/fraud/dedupe.ts`'s `computePhash`, before persisting
+ * the submission). Throws (e.g. `NoSuchKey`) if the object doesn't exist —
+ * the caller treats that as "the client's upload hasn't landed yet / never
+ * happened," not a storage-layer bug to swallow.
+ */
+export async function getObjectBytes(
+  campaignId: string,
+  submissionId: string,
+  config?: R2Config,
+): Promise<Buffer> {
+  const client = getR2Client(config);
+  const bucket = resolveBucket(config);
+  const key = submissionPhotoKey(campaignId, submissionId);
+
+  const result = await client.send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+  );
+  if (!result.Body) {
+    throw new Error(`getObjectBytes: empty body for ${key}`);
+  }
+  const bytes = await result.Body.transformToByteArray();
+  return Buffer.from(bytes);
 }
 
 /**

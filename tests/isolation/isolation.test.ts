@@ -64,41 +64,46 @@ async function insertSubmission(
   return row.id;
 }
 
-/** Seeds one submission and two ledger entries per campaign — the isolation
- * suite's substrate for the submissions/ledger/budget assertions. The
- * fixture (T1.4) only seeds campaigns/hosts/players/targets/memberships. */
+/** Seeds two submissions and two ledger entries per campaign (one entry per
+ * submission — `payout_ledger` carries a real `UNIQUE (campaign_id,
+ * submission_id)` constraint as of T4.3, so two entries can no longer
+ * share one submission the way this fixture originally modeled) — the
+ * isolation suite's substrate for the submissions/ledger/budget
+ * assertions. The fixture (T1.4) only seeds campaigns/hosts/players/
+ * targets/memberships. */
 async function seedSubmissionsAndLedger(
   db: TestDb,
   seed: SeedTwoCampaignsResult,
 ): Promise<void> {
-  const submissionA = await insertSubmission(db, seed.campaignA);
-  const submissionB = await insertSubmission(db, seed.campaignB);
-
   let cumulativeA = 0;
-  const ledgerA = CAMPAIGN_A_LEDGER_AMOUNTS.map((amount) => {
+  const ledgerA = [];
+  for (const amount of CAMPAIGN_A_LEDGER_AMOUNTS) {
+    const submissionId = await insertSubmission(db, seed.campaignA);
     cumulativeA += amount;
-    return {
+    ledgerA.push({
       campaignId: seed.campaignA.campaignId,
-      submissionId: submissionA,
+      submissionId,
       playerId: seed.campaignA.playerId,
       amount,
       tierAtTime: 1,
       cumulativeCommitted: cumulativeA,
-    };
-  });
+    });
+  }
 
   let cumulativeB = 0;
-  const ledgerB = CAMPAIGN_B_LEDGER_AMOUNTS.map((amount) => {
+  const ledgerB = [];
+  for (const amount of CAMPAIGN_B_LEDGER_AMOUNTS) {
+    const submissionId = await insertSubmission(db, seed.campaignB);
     cumulativeB += amount;
-    return {
+    ledgerB.push({
       campaignId: seed.campaignB.campaignId,
-      submissionId: submissionB,
+      submissionId,
       playerId: seed.campaignB.playerId,
       amount,
       tierAtTime: 1,
       cumulativeCommitted: cumulativeB,
-    };
-  });
+    });
+  }
 
   await db.insert(schema.payoutLedger).values([...ledgerA, ...ledgerB]);
 }
@@ -155,12 +160,17 @@ describe.skipIf(!hasTestDatabase())(
         const rowsB = await submissionsDal.listSubmissions(
           seed.campaignB.campaignId,
         );
-        expect(rowsA).toHaveLength(1);
-        expect(rowsB).toHaveLength(1);
+        // Two submissions per campaign now (one per ledger entry — see
+        // `seedSubmissionsAndLedger`'s doc comment, T4.3's unique
+        // `(campaign_id, submission_id)` constraint).
+        expect(rowsA).toHaveLength(CAMPAIGN_A_LEDGER_AMOUNTS.length);
+        expect(rowsB).toHaveLength(CAMPAIGN_B_LEDGER_AMOUNTS.length);
         expect(
           rowsA.every((s) => s.campaignId === seed.campaignA.campaignId),
         ).toBe(true);
-        expect(rowsA[0].id).not.toBe(rowsB[0].id);
+        const idsA = new Set(rowsA.map((s) => s.id));
+        const idsB = new Set(rowsB.map((s) => s.id));
+        expect([...idsA].some((id) => idsB.has(id))).toBe(false);
         expect(rowsA[0].deviceGps).toEqual({ lat: 46.9, long: -123.8 });
       });
 

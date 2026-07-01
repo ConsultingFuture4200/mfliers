@@ -68,6 +68,47 @@ export async function listTargets(campaignId: string): Promise<Target[]> {
   return rows;
 }
 
+/**
+ * Bulk-inserts one or more campaign-scoped targets, all in `red` (card
+ * T4.5 requirement 3 — the only two writers of a *brand-new* target row
+ * are the CSV import and pin-drop paths in `lib/target/csv-import.ts`,
+ * and both funnel through here). `state: "red"` is set explicitly rather
+ * than relying on the schema's `default("red")` (`lib/db/schema/
+ * targets.ts`) — the anti-requirement ("do NOT create targets in any
+ * state other than red") is easiest to audit at this single call site
+ * when it's spelled out rather than implicit.
+ *
+ * `location` goes through `toGeography` (never a bare WKT string — see
+ * `lib/db/dal/geo.ts`'s module doc / `tasks/lessons.md`), and the
+ * `.returning(targetSelection)` projection reads it straight back through
+ * `latOf`/`longOf` in the same statement, mirroring `claimTarget`'s
+ * `.returning(targetSelection)` usage above.
+ *
+ * `rows.length === 0` short-circuits before touching the DB — Drizzle's
+ * `.values([])` throws on an empty array, and an empty CSV import (every
+ * row malformed) is a valid, non-error outcome (an empty `created` list
+ * alongside a non-empty error report).
+ */
+export async function createTargets(
+  campaignId: string,
+  rows: readonly { label: string; lat: number; long: number }[],
+): Promise<Target[]> {
+  assertCampaignId(campaignId, "createTargets");
+  if (rows.length === 0) return [];
+  const inserted = await db
+    .insert(targets)
+    .values(
+      rows.map((row) => ({
+        campaignId,
+        label: row.label,
+        location: toGeography({ lat: row.lat, long: row.long }),
+        state: "red" as const,
+      })),
+    )
+    .returning(targetSelection);
+  return inserted;
+}
+
 /** Reads a single target scoped to `campaignId`. Returns `null` if the
  * target doesn't exist *or* belongs to a different campaign — a caller can
  * never distinguish "not found" from "found, but not yours." */

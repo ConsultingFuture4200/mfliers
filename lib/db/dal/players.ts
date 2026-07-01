@@ -31,6 +31,18 @@ export async function getPlayerByPhone(phone: string): Promise<Player | null> {
   return rows[0] ? toDomain(rows[0]) : null;
 }
 
+/** Reads a player by id (T4.1's capture flow: resolving the session's
+ * `playerId` into a full `Player` for the fraud pipeline). Not campaign-
+ * scoped, same reasoning as `getPlayerByPhone` — see module doc comment. */
+export async function getPlayerById(playerId: string): Promise<Player | null> {
+  const rows = await db
+    .select()
+    .from(players)
+    .where(eq(players.id, playerId))
+    .limit(1);
+  return rows[0] ? toDomain(rows[0]) : null;
+}
+
 /**
  * Returns the existing player for `phone`, or creates one. Global identity
  * per constitution/PRD — a phone number maps to exactly one player row

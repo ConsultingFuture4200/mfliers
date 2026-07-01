@@ -11,3 +11,4 @@ export * from "./targets";
 export * from "./submissions";
 export * from "./campaign-memberships";
 export * from "./payout-ledger";
+export * from "./audit-log";

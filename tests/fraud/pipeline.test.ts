@@ -218,6 +218,37 @@ describe.skipIf(!hasTestDatabase())(
       expect(result.nextActions).toEqual([]);
     });
 
+    it("the ordinal submission that first earns the tier-3 payout rate (approvedCount=25, this is the 26th) -> needs_review, not auto-approve", async () => {
+      // Regression test (Linus, batch-4 review): lib/payout/tiers.ts's
+      // lookupTierBand uses priorApprovedCount+1 (ordinal), so a player
+      // with approvedCount=25 has this submission land in the tier-3 band
+      // ($2.25) on accrual. Before the fix, runPipeline's isTier3 gate
+      // checked the raw prior count (25>=26 -> false) and let this exact
+      // submission auto-approve, skipping the mandatory tier-3 human
+      // review PRD G-3 promises.
+      const seed = await seedTwoCampaigns(db!);
+      await setApprovedCount(
+        seed.campaignA.campaignId,
+        seed.campaignA.playerId,
+        25,
+      );
+      const submission = await insertSubmission({
+        campaignId: seed.campaignA.campaignId,
+        playerId: seed.campaignA.playerId,
+        targetId: seed.campaignA.targetIds[0],
+        deviceGps: { lat: 46.9, long: -123.8 },
+      });
+      const campaign = buildCampaign(seed.campaignA.campaignId);
+      const player = buildPlayer(seed.campaignA.playerId);
+
+      const result = await runPipeline(submission, campaign, player);
+
+      expect(result.isTier3).toBe(true);
+      expect(result.decision).toBe("needs_review");
+      expect(result.fraudChecks.every((check) => check.passed)).toBe(true);
+      expect(result.nextActions).toEqual([]);
+    });
+
     it("a dedupe hit (same phash, different target) -> needs_review, not auto-reject", async () => {
       const seed = await seedTwoCampaigns(db!);
       const reusedPhash = "abcdef0123456789";

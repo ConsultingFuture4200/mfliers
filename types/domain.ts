@@ -157,9 +157,17 @@ export interface PayoutLedgerEntry {
   amountCents: number;
   /** The tier the player was on at the time this entry was created. */
   tierAtTime: number;
-  /** Running total of committed payouts for the campaign at this entry, in
-   * integer cents. */
+  /** Running total of *payable* committed payouts for the campaign at this
+   * entry, in integer cents (T4.3). Never includes an `unpayable` entry's
+   * amount — see `unpayable` below. */
   cumulativeCommittedCents: number;
+  /** True when this entry would have pushed `cumulativeCommittedCents`
+   * past the campaign's `budgetCapCents` (T4.3, PRD FR-P3 "at-cap"
+   * behavior). An unpayable entry's `amountCents` is always `0` — the
+   * submission is still approved (the pin still turns green) but no
+   * payable amount accrues. `tierAtTime` still records the band the
+   * submission would have earned, for host/audit visibility. */
+  unpayable: boolean;
   settled: boolean;
   settledAt: Date | null;
 }
@@ -171,4 +179,27 @@ export interface User {
   /** Campaign IDs this user is authorized for. Empty/ignored for
    * `site_admin`, who is platform-wide. */
   scopedCampaignIds: string[];
+}
+
+/** An audited staff action (T4.2, PRD FR-R1…FR-R4). Immutable, append-only
+ * — never updated or deleted once written. */
+export type AuditAction = "approve" | "reject" | "adjust" | "settle";
+
+/** One row of the immutable audit log (constitution §5: "immutable,
+ * append-only log of all approvals, rejections, manual adjustments,
+ * settlements, and claim events"). */
+export interface AuditLogEntry {
+  id: string;
+  campaignId: string;
+  /** Null for an action not tied to a specific submission (e.g. a
+   * player-level manual adjustment, FR-R4). */
+  submissionId: string | null;
+  playerId: string | null;
+  /** The staff user (`users.id`) who performed the action, or `null` for
+   * the one system-driven action (`lib/capture/submit.ts`'s auto-approve
+   * dispatch) that no human decided. */
+  actorUserId: string | null;
+  action: AuditAction;
+  reason: string | null;
+  createdAt: Date;
 }

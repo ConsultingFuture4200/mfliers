@@ -24,6 +24,7 @@ import type { R2Config } from "@/lib/storage/r2";
 import {
   createSignedUploadUrl,
   deleteCampaignObjects,
+  getObjectBytes,
   submissionPhotoKey,
 } from "@/lib/storage/r2";
 
@@ -109,6 +110,33 @@ describe.skipIf(!hasTestR2())(
       );
       const retrieved = await getResult.Body?.transformToByteArray();
       expect(Buffer.from(retrieved ?? [])).toEqual(body);
+    });
+
+    it("getObjectBytes reads back exactly what was uploaded (T4.1's server-side phash read path)", async () => {
+      const campaignId = `camp-${Date.now()}-c`;
+      const submissionId = "sub-1";
+      const signed = await createSignedUploadUrl(
+        campaignId,
+        submissionId,
+        testConfig,
+      );
+      const body = Buffer.from("another-fake-jpeg");
+      const putResponse = await fetch(signed.url, {
+        method: "PUT",
+        headers: { "Content-Type": "image/jpeg" },
+        body,
+      });
+      expect(putResponse.ok).toBe(true);
+
+      const bytes = await getObjectBytes(campaignId, submissionId, testConfig);
+      expect(bytes).toEqual(body);
+    });
+
+    it("getObjectBytes throws for a submission whose upload never landed", async () => {
+      const campaignId = `camp-${Date.now()}-missing`;
+      await expect(
+        getObjectBytes(campaignId, "never-uploaded", testConfig),
+      ).rejects.toThrow();
     });
 
     it("a signed URL cannot be used to write to a different key than the one it was issued for", async () => {

@@ -9,7 +9,7 @@
  * as stored (server-stamped at insert time — constitution §3, time — never
  * recomputed here).
  */
-import { and, desc, eq, lt, ne } from "drizzle-orm";
+import { and, desc, eq, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { submissions } from "@/lib/db/schema";
 import type {
@@ -19,7 +19,7 @@ import type {
   SubmissionDecision,
 } from "@/types/domain";
 import { assertCampaignId } from "./scope";
-import { latOf, longOf } from "./geo";
+import { latOf, longOf, toGeography } from "./geo";
 
 const submissionSelection = {
   id: submissions.id,
@@ -161,6 +161,105 @@ export async function getPreviousSubmission(
   };
 }
 
+/** Input for `insertSubmission` (T4.1's capture flow, card requirement 5:
+ * "persists the submission" with a server-stamped `receivedAt`). Every
+ * field the schema requires except `campaignId`/`id`, which are the
+ * function's own explicit parameters. */
+export interface NewSubmissionInput {
+  playerId: string;
+  targetId: string;
+  /** The R2 object key (`lib/storage/r2.ts`'s `submissionPhotoKey`), never
+   * a full URL — matches this DAL's existing `photoUrl` naming even though
+   * it stores a key, not a URL (pre-existing naming from T1.3's schema). */
+  photoUrl: string;
+  deviceGps: Coordinate;
+  exifGps: Coordinate | null;
+  exifTs: Date | null;
+  phash: string;
+  /** Server-stamped receipt time (constitution §3 — never a client value).
+   * Passed in rather than defaulted here so the caller's "when did the
+   * server receive this" decision is visible at the call site. */
+  receivedAt: Date;
+}
+
+/**
+ * Inserts a new submission row (card requirement 5). `submissionId` is
+ * minted by the caller (mirrors `app/api/uploads/sign/route.ts`'s
+ * `randomUUID()` — the same id a signed-upload URL was already issued for,
+ * so the object this submission's `photoUrl` key points at was written by
+ * that earlier call) rather than left to the schema's `defaultRandom()`, so
+ * a retried POST (same `submissionId`, e.g. a client retry after a network
+ * blip) can be idempotent: `onConflictDoNothing` + re-read means a second
+ * insert attempt for an id that already exists returns the *existing* row
+ * instead of erroring or creating a duplicate — the caller
+ * (`lib/capture/submit.ts`) relies on this to make the whole submit flow
+ * safe to retry.
+ */
+export async function insertSubmission(
+  campaignId: string,
+  submissionId: string,
+  input: NewSubmissionInput,
+): Promise<Submission> {
+  assertCampaignId(campaignId, "insertSubmission");
+  await db
+    .insert(submissions)
+    .values({
+      id: submissionId,
+      campaignId,
+      playerId: input.playerId,
+      targetId: input.targetId,
+      photoUrl: input.photoUrl,
+      deviceGps: toGeography(input.deviceGps),
+      exifGps: input.exifGps ? toGeography(input.exifGps) : null,
+      exifTs: input.exifTs,
+      phash: input.phash,
+      receivedAt: input.receivedAt,
+    })
+    .onConflictDoNothing({ target: submissions.id });
+
+  const row = await getSubmission(campaignId, submissionId);
+  if (!row) {
+    // Unreachable in practice: the insert only no-ops on a conflicting id,
+    // which means a row with this id must already exist (and, since
+    // `submissions.id` is a plain uuid primary key with no campaign-scoped
+    // uniqueness twist, it must be this campaign's row given the caller
+    // always mints a fresh id per campaign).
+    throw new Error(
+      `insertSubmission: no row found for ${submissionId} in campaign ` +
+        `${campaignId} after insert/conflict`,
+    );
+  }
+  return row;
+}
+
+/**
+ * Counts `playerId`'s `approved` submissions within `campaignId` — the
+ * capture flow's (T4.1) "running approved total" confirmation-screen
+ * figure (card requirement 6). Derived directly from `submissions` rather
+ * than `campaign_memberships.approved_count` (T4.3 owns incrementing that
+ * counter as part of ledger accrual, which doesn't exist yet as of this
+ * card) — a fresh `COUNT(*)` over already-decided rows is available the
+ * moment `recordSubmissionDecision` persists an `approved` decision, with
+ * no dependency on T4.3 landing first.
+ */
+export async function countApprovedSubmissions(
+  campaignId: string,
+  playerId: string,
+): Promise<number> {
+  assertCampaignId(campaignId, "countApprovedSubmissions");
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(submissions)
+    .where(
+      and(
+        eq(submissions.campaignId, campaignId),
+        eq(submissions.playerId, playerId),
+        eq(submissions.decision, "approved"),
+      ),
+    );
+  return row?.count ?? 0;
+}
+
 /**
  * Persists the fraud pipeline's (T3.5, `lib/fraud/pipeline.ts`) full set of
  * `FraudCheckResult`s and its final `decision` onto a submission (card
@@ -186,6 +285,44 @@ export async function recordSubmissionDecision(
   const rows = await db
     .update(submissions)
     .set({ fraudChecks, decision })
+    .where(
+      and(
+        eq(submissions.campaignId, campaignId),
+        eq(submissions.id, submissionId),
+      ),
+    )
+    .returning(submissionSelection);
+  return rows[0] ? toDomain(rows[0]) : null;
+}
+
+/**
+ * Persists a **human** review decision (T4.2's host review queue —
+ * `lib/review/decision.ts`'s `approveSubmission`/`rejectSubmission`), as
+ * opposed to `recordSubmissionDecision` above, which the automated fraud
+ * pipeline (T3.5) and gallery-fallback forcing (T4.1) use for a decision
+ * with no human decider. This is the one write path that stamps
+ * `decided_by`/`decided_at` (both columns existed on the schema since
+ * T1.3 but were unused until this card — the automated paths never had an
+ * actor to attribute a decision to). Overwrites the whole `fraudChecks`
+ * array like `recordSubmissionDecision` does — callers pass the full,
+ * already-appended array (see `lib/review/decision.ts`'s
+ * `appendHostDecisionCheck`), never a partial one.
+ *
+ * Scoped to `campaignId`; returns `null` if `submissionId` doesn't exist
+ * *or* belongs to a different campaign (mirrors every other not-found/
+ * not-yours conflation in this file).
+ */
+export async function recordReviewDecision(
+  campaignId: string,
+  submissionId: string,
+  decision: SubmissionDecision,
+  fraudChecks: FraudCheckResult[],
+  decidedBy: string,
+): Promise<Submission | null> {
+  assertCampaignId(campaignId, "recordReviewDecision");
+  const rows = await db
+    .update(submissions)
+    .set({ decision, fraudChecks, decidedBy, decidedAt: new Date() })
     .where(
       and(
         eq(submissions.campaignId, campaignId),

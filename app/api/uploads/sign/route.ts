@@ -11,27 +11,30 @@
  * accepted from the client, so a caller can never choose (and overwrite)
  * another submission's object key.
  *
- * This route also checks the caller is a **member** of the target
- * campaign (via the T2.1 campaign-memberships DAL) before minting a
- * signed URL — a player token only authorizes joined campaigns
- * (constitution §5). This is an interim check: it does not yet verify the
- * player has *claimed* the specific target being submitted for. The claim
- * state machine (T3.2) and campaign lifecycle (T3.1) don't exist yet as
- * of this card, so "is this player allowed to submit for this
- * campaign/target right now" isn't a check this task can implement
- * without inventing that domain logic ahead of its card. Revisit this
- * route when T3.2/T4.1 land — they may want to tighten this further to
- * "player has an open claim on `targetId`."
+ * This route checks the caller is a **member** of the target campaign
+ * (via the T2.1 campaign-memberships DAL) and, per T4.1's tightening
+ * (batch-4 review fix, Linus), that the caller has an **active claim** on
+ * `targetId` (`lib/target/state-machine.ts`'s `isActivelyClaimedBy`)
+ * before minting a signed URL: a player token only authorizes joined
+ * campaigns, and now only a target they've actually claimed (constitution
+ * §5). Without this, any campaign member could mint unlimited short-lived
+ * signed PUT URLs unrelated to any claim, at zero server-side rate limit,
+ * a storage-cost/DoS surface (not a fraud bypass end-to-end:
+ * `lib/capture/submit.ts`'s `submitCapture` already independently calls
+ * `isActivelyClaimedBy` before a submission can be persisted/paid).
  */
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth/config";
 import { getCampaignById } from "@/lib/db/dal/campaigns";
 import { getMembership } from "@/lib/db/dal/campaign-memberships";
+import { getTarget } from "@/lib/db/dal/targets";
+import { isActivelyClaimedBy } from "@/lib/target/state-machine";
 import { createSignedUploadUrl } from "@/lib/storage/r2";
 
 interface SignUploadBody {
   campaignId?: unknown;
+  targetId?: unknown;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -71,6 +74,19 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  const targetId = body.targetId;
+  if (typeof targetId !== "string" || targetId.trim().length === 0) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "invalid_target_id",
+          message: "A non-empty `targetId` string is required.",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
   const campaign = await getCampaignById(campaignId);
   if (!campaign) {
     return NextResponse.json(
@@ -86,6 +102,25 @@ export async function POST(request: Request): Promise<Response> {
         error: {
           code: "forbidden",
           message: "You are not a member of this campaign.",
+        },
+      },
+      { status: 403 },
+    );
+  }
+
+  const target = await getTarget(campaignId, targetId);
+  if (!target) {
+    return NextResponse.json(
+      { error: { code: "not_found", message: "Target not found." } },
+      { status: 404 },
+    );
+  }
+  if (!isActivelyClaimedBy(target, session.playerId)) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "forbidden",
+          message: "You do not have an active claim on this target.",
         },
       },
       { status: 403 },

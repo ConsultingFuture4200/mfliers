@@ -1,0 +1,2 @@
+ALTER TABLE "payout_ledger" ADD COLUMN "unpayable" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "payout_ledger" ADD CONSTRAINT "payout_ledger_campaign_submission_key" UNIQUE("campaign_id","submission_id");

@@ -70,6 +70,13 @@
  * `DEFAULT_TIER_3_THRESHOLD` documents FR-F7's literal number for tests/
  * reference; it is never read by `runPipeline` itself.
  *
+ * `isTier3` checks the submission's *ordinal* approval number
+ * (`approvedCount + 1`) against that threshold, not the raw prior
+ * `approvedCount` (matching `lib/payout/tiers.ts`'s `lookupTierBand`
+ * convention). This guarantees the exact submission whose payout lands in
+ * the top tier band is always the one forced into review (batch-4 review
+ * fix; previously off-by-one from the ledger's own tier lookup).
+ *
  * ## Decoupling (card anti-requirement: "do NOT flip target state or write
  * the ledger directly from here")
  * `runPipeline` never imports `lib/target/state-machine.ts` or a ledger
@@ -203,7 +210,15 @@ export async function runPipeline(
   const approvedCount = membership?.approvedCount ?? 0;
   const tier3Threshold =
     campaign.tierTable[campaign.tierTable.length - 1].minCount;
-  const isTier3 = approvedCount >= tier3Threshold;
+  // Ordinal convention (matches lib/payout/tiers.ts / accrueLedgerEntry):
+  // if approved, *this* submission would be the (approvedCount + 1)th
+  // approval for this player in this campaign. Checking that ordinal
+  // number against the tier-3 threshold (rather than the raw prior count)
+  // ensures the exact submission whose payout lands in the top tier band
+  // is always the one forced into review (previously a NEEDS_CLARIFICATION;
+  // see lib/payout/tiers.ts's doc comment); resolved per Linus's batch-4
+  // review finding.
+  const isTier3 = approvedCount + 1 >= tier3Threshold;
 
   const hasHardFail = fraudChecks.some(
     (result) => !result.passed && HARD_FAIL_CHECKS.has(result.check),
