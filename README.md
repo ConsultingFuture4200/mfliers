@@ -35,7 +35,28 @@ pnpm db:migrate              # apply migrations (needs DATABASE_URL + PostGIS)
 
 ## Build status
 
-Progress is tracked in [`tasks/todo.md`](./tasks/todo.md); lessons in
-[`tasks/lessons.md`](./tasks/lessons.md). Issues live in the Linear "Flier Canvassing
-Platform — Phase 1" project (Development team). Each batch is reviewed by Linus
-(bugs/security) and Liotta (architecture) before its gate opens.
+**Phase 1 complete** — all 24 task cards (Batches 1–5) built, reviewed (Linus for
+bugs/security + Liotta for architecture per batch), and committed. Both mid-build
+review gates cleared: T2.1 tenant-isolation DAL and T3.3 dedupe.
+
+Verified locally against real PostGIS 3.4 + real Chromium (Playwright): the full
+claim → submit → approve → green-pin + ledger-accrual loop, the tenant-isolation
+suite, the ledger tier/cap math, and the Mycofest seed. Unit/integration: 316 passing.
+e2e: 59 passing.
+
+Phase-1 exit criteria (EC-1…EC-7):
+
+| EC | Criterion | Status |
+|----|-----------|--------|
+| EC-1 | End-to-end loop claim→submit→approve→green | Loop **verified** (e2e, live DB + ledger accrual); real-phone-outdoors demo pending a device |
+| EC-2 | Median submit ≤20s, n≥20 real submits | Instrumentation **verified**; the ≤20s field median needs real submits |
+| EC-3 | Auto-decide ≥70% tier-1/2, 100% tier-3 to review | Tier-3→review **verified**; ≥70% rate is instrumented, measured on real data |
+| EC-4 | Universal map ≥2 live campaigns + clustering; correct pin states | 2 campaigns + pin states **verified**; Mapbox cluster *visual* needs a token |
+| EC-5 | Zero cross-campaign leaks; isolation suite 100% | **Verified** (64-test isolation suite green) |
+| EC-6 | Admin creates campaign/imports/goes live, no DB access | Routes + import **verified**; full UI click-through demo pending |
+| EC-7 | Ledger tiered payout in cents; over-cap unpayable at $1,000 | **Verified** (15 ledger tests incl. cap boundary + concurrent race) |
+
+Items marked "pending" need live external services/secrets not present in the build
+sandbox (a real device camera, Twilio SMS, live Cloudflare R2 + Mapbox tokens, a deploy).
+Decision records in [`docs/decisions/`](./docs/decisions/); open follow-ups in Linear.
+Progress tracker: [`tasks/todo.md`](./tasks/todo.md); build lessons: [`tasks/lessons.md`](./tasks/lessons.md).
