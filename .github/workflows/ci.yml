@@ -1,0 +1,72 @@
+name: CI
+
+# T1.5: gate every PR on lint, build, migrations, and tests. Constitution §2:
+# "CI/CD: Vercel Git integration + GitHub Actions for tests. Tests gate on
+# PR; Vercel handles deploy/preview." This workflow never deploys — Vercel's
+# own Git integration handles preview/production deploys on push/merge.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Prevent piling up redundant runs when new commits land on the same PR.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Test-only credentials for the ephemeral `postgis/postgis` service
+  # container below — not a secret, not a real database (constitution §5:
+  # "no secrets in client bundles"; this connection string never leaves
+  # CI and never touches a real Postgres instance).
+  DATABASE_URL: postgres://postgres:postgres@localhost:5432/mfliers_test
+
+jobs:
+  ci:
+    name: lint, build, migrate, test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mfliers_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Apply migrations
+        run: pnpm db:migrate
+
+      - name: Test
+        run: pnpm test

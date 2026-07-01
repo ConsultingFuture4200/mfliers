@@ -1,0 +1,19 @@
+node_modules
+.next
+out
+build
+dist
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+
+# drizzle-kit generated migration metadata — not hand-authored.
+lib/db/migrations/meta
+
+# Spec/task documents are hand-authored deliverables, not app source —
+# leave their formatting untouched.
+docs/
+tasks/
+CLAUDE.md
+README.md

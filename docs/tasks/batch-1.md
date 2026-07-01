@@ -65,7 +65,7 @@ Stand up a clean Next.js App Router project with pnpm, TypeScript strict mode, T
 - [ ] `pnpm install` succeeds with a committed `pnpm-lock.yaml`.
 - [ ] `pnpm build` completes with zero TypeScript errors under strict mode.
 - [ ] `pnpm lint` passes on the scaffold.
-- [ ] `pnpm format --check` passes.
+- [ ] `pnpm format:check` passes.
 - [ ] All directories from Req 4 exist in the repo.
 - [ ] `@/components/...` style imports resolve.
 - [ ] `.env` is gitignored; `.env.example` is committed.

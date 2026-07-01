@@ -4,11 +4,11 @@ Self-improvement loop per CLAUDE.md §"Operational workflow". Check off cards as
 acceptance criteria are met. Two review gates (T2.1, T3.3) block their dependents.
 
 ## Batch 1 — Foundation
-- [ ] T1.1 — Next.js + pnpm + TypeScript scaffold
-- [ ] T1.2 — Shared domain types
-- [ ] T1.3 — PostGIS schema + migrations
-- [ ] T1.4 — Test infrastructure (Vitest + Playwright)
-- [ ] T1.5 — CI pipeline + pooled DB connection
+- [x] T1.1 — Next.js + pnpm + TypeScript scaffold
+- [x] T1.2 — Shared domain types
+- [x] T1.3 — PostGIS schema + migrations
+- [x] T1.4 — Test infrastructure (Vitest + Playwright)
+- [x] T1.5 — CI pipeline + pooled DB connection
 
 ## Batch 2 — Data + Auth  (⊢ T2.1 isolation review gate)
 - [ ] T2.1 — Isolation-scoped DAL + isolation suite  **[REVIEW GATE]**
