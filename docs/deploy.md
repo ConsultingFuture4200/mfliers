@@ -65,3 +65,27 @@ an actual Twilio/R2 call rather than a mock), add the credential as a
 **GitHub Actions repository secret** (Settings → Secrets and variables →
 Actions) and reference it as `${{ secrets.NAME }}` in the workflow — never
 hardcode it.
+
+---
+
+## Live deployment (Phase-1 demo)
+
+- **Production URL:** https://mfliers-eight.vercel.app (Vercel, personal scope; auto-deploys on push to `main`)
+- **Database:** managed Supabase Postgres + PostGIS (transaction pooler, port 6543). The
+  serverless app connects via the pooler with `prepare: false` (see `lib/db/client.ts`);
+  migrations run against the **session pooler** (port 5432), because Supabase's *direct*
+  host (`db.<ref>.supabase.co`) is IPv6-only and unreachable from IPv4-only environments.
+- **Env vars (set in Vercel, encrypted):** `DATABASE_URL` (pooler URI), `AUTH_SECRET`.
+- **Seeded:** Mycofest ($1,000 cap, 125/175/225 tiers, admin-only, 10 targets) + a second
+  live campaign (`scripts/seed-*.ts`).
+- **Deployment protection:** Vercel Authentication is **off** so the public landing/map are
+  reachable (the app enforces its own auth server-side).
+
+### Not yet configured (features degrade gracefully until set)
+| Env var(s) | Unlocks | Without it |
+|---|---|---|
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | Mapbox base tiles on the maps | Map falls back to a plain pin list |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_VERIFY_SERVICE_SID` | Player phone-OTP login | OTP send/verify fails |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_PUBLIC_URL` | Photo upload on submission | "Could not prepare the photo upload" |
+
+Add any of these with `vercel env add <NAME> production` (and `preview`), then redeploy.
