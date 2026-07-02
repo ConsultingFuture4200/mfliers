@@ -12,6 +12,15 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Logo } from "@/components/brand/Logo";
 
 type Step = "email" | "code";
 
@@ -88,72 +97,98 @@ export default function PlayerLoginPage() {
 
   if (success) {
     return (
-      <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
-        <h1 className="text-lg font-semibold">You&apos;re in.</h1>
-        <p className="text-sm text-muted-foreground">
-          Logged in as {email}. Taking you to the campaigns…
-        </p>
-        <a href={safeCallbackUrl()} className="text-sm underline">
-          Continue
-        </a>
+      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 p-6">
+        <div className="flex justify-center">
+          <Logo />
+        </div>
+        <Card className="rounded-2xl border-2 border-foreground/15">
+          <CardHeader>
+            <h1 className="font-heading text-xl font-semibold">
+              You&apos;re in.
+            </h1>
+            <CardDescription>
+              Logged in as {email}. Taking you to the campaigns…
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <a
+              href={safeCallbackUrl()}
+              className="text-sm text-primary underline underline-offset-4"
+            >
+              Continue
+            </a>
+          </CardContent>
+        </Card>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-6 p-6">
-      <h1 className="text-lg font-semibold">Player login</h1>
+    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 p-6">
+      <div className="flex justify-center">
+        <Logo />
+      </div>
+      <Card className="rounded-2xl border-2 border-foreground/15">
+        <CardHeader>
+          <h1 className="font-heading text-xl font-semibold">Player login</h1>
+          <CardDescription>Sign in with a one-time code.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {step === "email" ? (
+            <form className="flex flex-col gap-4" onSubmit={handleRequestCode}>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={pending}>
+                {pending ? "Sending…" : "Send code"}
+              </Button>
+            </form>
+          ) : (
+            <form className="flex flex-col gap-4" onSubmit={handleVerifyCode}>
+              <p className="text-sm text-muted-foreground">
+                Enter the code sent to {email}.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="code">Verification code</Label>
+                <Input
+                  id="code"
+                  type="text"
+                  inputMode="numeric"
+                  required
+                  autoComplete="one-time-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={pending}>
+                {pending ? "Verifying…" : "Verify"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => setStep("email")}
+                disabled={pending}
+              >
+                Use a different email
+              </Button>
+            </form>
+          )}
 
-      {step === "email" ? (
-        <form className="flex flex-col gap-3" onSubmit={handleRequestCode}>
-          <label className="flex flex-col gap-1 text-sm">
-            Email
-            <input
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="h-8 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            />
-          </label>
-          <Button type="submit" disabled={pending}>
-            {pending ? "Sending…" : "Send code"}
-          </Button>
-        </form>
-      ) : (
-        <form className="flex flex-col gap-3" onSubmit={handleVerifyCode}>
-          <p className="text-sm text-muted-foreground">
-            Enter the code sent to {email}.
-          </p>
-          <label className="flex flex-col gap-1 text-sm">
-            Verification code
-            <input
-              type="text"
-              inputMode="numeric"
-              required
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="h-8 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            />
-          </label>
-          <Button type="submit" disabled={pending}>
-            {pending ? "Verifying…" : "Verify"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setStep("email")}
-            disabled={pending}
-          >
-            Use a different email
-          </Button>
-        </form>
-      )}
-
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="mt-4 text-sm text-destructive">{error}</p>
+          ) : null}
+        </CardContent>
+      </Card>
     </main>
   );
 }

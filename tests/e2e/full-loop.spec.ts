@@ -274,7 +274,11 @@ test.describe("full claim -> capture+submit -> approve -> green+ledger loop", ()
     await playerPage.goto(`/campaigns/${campaignId}/map`);
     const redPin = playerPage.locator(`[data-testid="map-pin-${targetId}"]`);
     await expect(redPin).toHaveAttribute("data-state", "red");
+    // Tapping a pin opens its detail sheet; the "Claim & post flier" button
+    // drives the claim → capture route (UI rebuild: submit surfaces in the
+    // pin view rather than an abrupt auto-claim on tap).
     await redPin.click();
+    await playerPage.locator('[data-testid="pin-claim-button"]').click();
 
     await expect(playerPage).toHaveURL(
       `/campaigns/${campaignId}/submit/${targetId}`,

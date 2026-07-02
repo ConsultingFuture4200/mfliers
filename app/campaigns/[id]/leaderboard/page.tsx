@@ -22,6 +22,9 @@ import {
   type LeaderboardEntry,
 } from "@/lib/leaderboard/rank";
 import { PersonalStats } from "@/components/stats/PersonalStats";
+import { PageShell } from "@/components/brand/PageShell";
+import { Pill } from "@/components/brand/Pill";
+import { cn } from "@/lib/utils";
 
 interface PageParams {
   id: string;
@@ -34,18 +37,29 @@ interface PageProps {
 function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
   return (
     <li
-      className="flex items-center justify-between rounded-md border border-input px-3 py-2 text-sm"
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-xl border-2 border-foreground/15 bg-card px-4 py-3",
+        entry.isViewer && "border-primary/40 bg-accent",
+      )}
       data-testid="leaderboard-row"
       data-player-id={entry.playerId}
       data-rank={entry.rank}
     >
-      <span>
-        #{entry.rank}
+      <span className="flex items-center gap-2">
+        <Pill>#{entry.rank}</Pill>
         {entry.isViewer ? (
-          <span data-testid="leaderboard-row-you"> (you)</span>
+          <span
+            data-testid="leaderboard-row-you"
+            className="text-sm font-medium"
+          >
+            (you)
+          </span>
         ) : null}
       </span>
-      <span data-testid="leaderboard-row-approved-count">
+      <span
+        data-testid="leaderboard-row-approved-count"
+        className="font-mono text-sm"
+      >
         {entry.approvedCount} approved
       </span>
     </li>
@@ -67,14 +81,14 @@ export default async function LeaderboardPage({ params }: PageProps) {
   } catch (err) {
     if (err instanceof CampaignNotFoundError) {
       return (
-        <main className="mx-auto max-w-2xl p-6">
+        <PageShell title="Leaderboard">
           <p
             className="text-sm text-destructive"
             data-testid="leaderboard-not-found"
           >
             This campaign could not be found.
           </p>
-        </main>
+        </PageShell>
       );
     }
     throw err;
@@ -85,44 +99,47 @@ export default async function LeaderboardPage({ params }: PageProps) {
     : null;
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
-      <h1 className="text-lg font-semibold">Leaderboard</h1>
+    <PageShell
+      title="Leaderboard"
+      description="Top canvassers by approved fliers."
+    >
+      <div className="flex flex-col gap-6">
+        {leaderboard.campaignClosed && leaderboard.grandPrizeWinnerPlayerId ? (
+          <p
+            className="rounded-xl border-2 border-foreground/15 bg-accent p-4 font-heading text-base font-bold"
+            data-testid="grand-prize-winner"
+            data-player-id={leaderboard.grandPrizeWinnerPlayerId}
+          >
+            Grand prize winner: player {leaderboard.grandPrizeWinnerPlayerId}
+          </p>
+        ) : null}
 
-      {leaderboard.campaignClosed && leaderboard.grandPrizeWinnerPlayerId ? (
-        <p
-          className="rounded-md bg-secondary p-3 text-sm font-medium"
-          data-testid="grand-prize-winner"
-          data-player-id={leaderboard.grandPrizeWinnerPlayerId}
-        >
-          Grand prize winner: player {leaderboard.grandPrizeWinnerPlayerId}
-        </p>
-      ) : null}
+        <ul className="flex flex-col gap-3" data-testid="leaderboard-top">
+          {leaderboard.top.map((entry) => (
+            <LeaderboardRow key={entry.playerId} entry={entry} />
+          ))}
+        </ul>
 
-      <ul className="flex flex-col gap-2" data-testid="leaderboard-top">
-        {leaderboard.top.map((entry) => (
-          <LeaderboardRow key={entry.playerId} entry={entry} />
-        ))}
-      </ul>
+        {leaderboard.viewer &&
+        !leaderboard.top.some(
+          (e) => e.playerId === leaderboard.viewer!.playerId,
+        ) ? (
+          <div data-testid="leaderboard-viewer-rank">
+            <LeaderboardRow entry={leaderboard.viewer} />
+          </div>
+        ) : null}
 
-      {leaderboard.viewer &&
-      !leaderboard.top.some(
-        (e) => e.playerId === leaderboard.viewer!.playerId,
-      ) ? (
-        <div data-testid="leaderboard-viewer-rank">
-          <LeaderboardRow entry={leaderboard.viewer} />
-        </div>
-      ) : null}
-
-      {stats ? (
-        <PersonalStats stats={stats} />
-      ) : (
-        <p
-          className="text-sm text-muted-foreground"
-          data-testid="stats-signed-out"
-        >
-          Sign in as a player to see your personal stats.
-        </p>
-      )}
-    </main>
+        {stats ? (
+          <PersonalStats stats={stats} />
+        ) : (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="stats-signed-out"
+          >
+            Sign in as a player to see your personal stats.
+          </p>
+        )}
+      </div>
+    </PageShell>
   );
 }

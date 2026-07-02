@@ -21,6 +21,10 @@ import { auth } from "@/lib/auth/config";
 import { resolveStaffPrincipal } from "@/lib/auth/staff";
 import { ForbiddenError } from "@/lib/auth/guards";
 import { listReviewQueue, type ReviewQueueItem } from "@/lib/review/queue";
+import { PageShell } from "@/components/brand/PageShell";
+import { Pill } from "@/components/brand/Pill";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ReviewActions } from "./ReviewActions";
 
 interface PageParams {
@@ -33,60 +37,78 @@ interface PageProps {
 
 function DeniedMessage({ message }: { message: string }) {
   return (
-    <main className="mx-auto max-w-2xl p-6">
-      <p className="text-sm text-destructive" data-testid="review-denied">
-        {message}
-      </p>
-    </main>
+    <PageShell width="sm">
+      <Card className="border-2 border-foreground/15">
+        <CardContent>
+          <p className="text-sm text-destructive" data-testid="review-denied">
+            {message}
+          </p>
+        </CardContent>
+      </Card>
+    </PageShell>
   );
 }
 
 function ReviewCard({ item }: { item: ReviewQueueItem }) {
   const { submission, target, distanceM, player, photoUrl } = item;
   return (
-    <li
-      className="flex flex-col gap-3 rounded-lg border border-input p-4"
-      data-testid="review-card"
-      data-submission-id={submission.id}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element -- signed R2
-          URLs are short-lived and per-request; next/image's remote-pattern
-          allowlist doesn't fit a presigned, unique-per-view URL. */}
-      <img
-        src={photoUrl}
-        alt={`Submission photo for target ${target.label}`}
-        className="max-h-64 w-full rounded-md object-cover"
-      />
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-        <dt className="text-muted-foreground">Target</dt>
-        <dd data-testid="review-target">{target.label}</dd>
-        <dt className="text-muted-foreground">Distance from target</dt>
-        <dd data-testid="review-distance">
-          {distanceM !== null ? `${distanceM.toFixed(1)} m` : "unknown"}
-        </dd>
-        <dt className="text-muted-foreground">Canvasser</dt>
-        <dd data-testid="review-canvasser">{player?.email ?? "unknown"}</dd>
-        <dt className="text-muted-foreground">Received</dt>
-        <dd>{submission.receivedAt.toISOString()}</dd>
-      </dl>
-      <ul
-        className="flex flex-col gap-1 text-sm"
-        data-testid="review-fraud-checks"
-      >
-        {submission.fraudChecks.map((check) => (
-          <li
-            key={check.check}
-            className={check.passed ? "text-foreground" : "text-destructive"}
+    <li data-testid="review-card" data-submission-id={submission.id}>
+      <Card className="border-2 border-foreground/15">
+        {/* eslint-disable-next-line @next/next/no-img-element -- signed R2
+            URLs are short-lived and per-request; next/image's remote-pattern
+            allowlist doesn't fit a presigned, unique-per-view URL. */}
+        <img
+          src={photoUrl}
+          alt={`Submission photo for target ${target.label}`}
+          className="max-h-64 w-full object-cover"
+        />
+        <CardHeader className="flex-row items-center justify-between gap-2">
+          <CardTitle className="font-heading" data-testid="review-target">
+            {target.label}
+          </CardTitle>
+          <span
+            className="shrink-0"
+            data-testid="review-distance"
+            aria-label="Distance from target"
           >
-            {check.check}: {check.passed ? "passed" : "flagged"} —{" "}
-            {check.detail}
-          </li>
-        ))}
-      </ul>
-      <ReviewActions
-        campaignId={target.campaignId}
-        submissionId={submission.id}
-      />
+            <Pill>
+              {distanceM !== null ? `${distanceM.toFixed(1)} m` : "unknown"}
+            </Pill>
+          </span>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+            <dt className="text-muted-foreground">Canvasser</dt>
+            <dd className="font-mono text-xs" data-testid="review-canvasser">
+              {player?.email ?? "unknown"}
+            </dd>
+            <dt className="text-muted-foreground">Received</dt>
+            <dd className="font-mono text-xs">
+              {submission.receivedAt.toISOString()}
+            </dd>
+          </dl>
+          <ul
+            className="flex flex-wrap gap-2"
+            data-testid="review-fraud-checks"
+          >
+            {submission.fraudChecks.map((check) => (
+              <li key={check.check}>
+                <Badge
+                  variant={check.passed ? "outline" : "destructive"}
+                  className="h-auto whitespace-normal py-0.5 text-left font-mono"
+                >
+                  {check.check}: {check.passed ? "passed" : "flagged"} —{" "}
+                  {check.detail}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+          <ReviewActions
+            campaignId={target.campaignId}
+            submissionId={submission.id}
+          />
+        </CardContent>
+      </Card>
     </li>
   );
 }
@@ -124,8 +146,10 @@ export default async function ReviewQueuePage({ params }: PageProps) {
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
-      <h1 className="text-lg font-semibold">Review queue</h1>
+    <PageShell
+      title="Review queue"
+      description="Screen geotagged flier submissions before they pay out."
+    >
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           Nothing needs review right now.
@@ -137,6 +161,6 @@ export default async function ReviewQueuePage({ params }: PageProps) {
           ))}
         </ul>
       )}
-    </main>
+    </PageShell>
   );
 }

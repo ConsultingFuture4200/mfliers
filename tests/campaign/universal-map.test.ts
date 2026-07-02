@@ -117,6 +117,9 @@ describe.skipIf(!hasTestDatabase())("universal map pins (T5.2)", () => {
         [
           "campaignId",
           "campaignName",
+          // The campaign's public flier artwork URL — shown on posted pins.
+          // Public-safe (campaign artwork, not player/ledger/budget data).
+          "flierImageUrl",
           "id",
           "lat",
           "long",

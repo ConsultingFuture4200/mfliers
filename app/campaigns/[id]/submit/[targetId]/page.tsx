@@ -38,7 +38,9 @@
  * persists in IndexedDB, not memory).
  */
 import { use, useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { StatCard } from "@/components/brand/StatCard";
 import { parseJpegExif } from "@/lib/capture/exif";
 import { compressImage } from "@/lib/capture/compress";
 import {
@@ -104,6 +106,21 @@ function getCurrentPosition(): Promise<GeolocationPosition> {
       timeout: 15_000,
     });
   });
+}
+
+/**
+ * Shared centered card wrapper for every capture-flow screen — keeps the
+ * mobile-first, thumb-reachable vertical centering the flow had while giving
+ * each state the field-guide bordered-card surface.
+ */
+function CaptureCard({ children }: { children: ReactNode }) {
+  return (
+    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center p-6">
+      <div className="flex flex-col gap-4 rounded-2xl border-2 border-foreground/15 bg-card p-6">
+        {children}
+      </div>
+    </main>
+  );
 }
 
 export default function SubmitCapturePage({ params }: PageProps) {
@@ -332,21 +349,25 @@ export default function SubmitCapturePage({ params }: PageProps) {
 
   if (phase === "location-denied") {
     return (
-      <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
-        <h1 className="text-lg font-semibold">Location access required</h1>
+      <CaptureCard>
+        <h1 className="font-heading text-xl font-bold">
+          Location access required
+        </h1>
         <p className="text-sm text-muted-foreground">
           This platform verifies your placement with your device&apos;s
           location. Please allow location access to submit a photo.
         </p>
-        <Button onClick={handleRetryLocation}>Try again</Button>
-      </main>
+        <Button className="h-11 w-full text-base" onClick={handleRetryLocation}>
+          Try again
+        </Button>
+      </CaptureCard>
     );
   }
 
   if (phase === "queued") {
     return (
-      <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
-        <h1 className="text-lg font-semibold">
+      <CaptureCard>
+        <h1 className="font-heading text-xl font-bold">
           Queued — will submit when online
         </h1>
         <p
@@ -356,14 +377,14 @@ export default function SubmitCapturePage({ params }: PageProps) {
           You&apos;re offline. Your photo is saved on this device and will be
           submitted automatically as soon as you&apos;re back online.
         </p>
-      </main>
+      </CaptureCard>
     );
   }
 
   if (phase === "queued-synced") {
     return (
-      <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
-        <h1 className="text-lg font-semibold">Submitted</h1>
+      <CaptureCard>
+        <h1 className="font-heading text-xl font-bold">Submitted</h1>
         <p
           data-testid="offline-synced-message"
           className="text-sm text-muted-foreground"
@@ -371,14 +392,16 @@ export default function SubmitCapturePage({ params }: PageProps) {
           Your queued flier photo was submitted now that you&apos;re back
           online, and is in the normal review flow.
         </p>
-      </main>
+      </CaptureCard>
     );
   }
 
   if (phase === "already-filled") {
     return (
-      <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
-        <h1 className="text-lg font-semibold">Target already filled</h1>
+      <CaptureCard>
+        <h1 className="font-heading text-xl font-bold">
+          Target already filled
+        </h1>
         <p
           data-testid="offline-already-filled-message"
           className="text-sm text-muted-foreground"
@@ -387,14 +410,14 @@ export default function SubmitCapturePage({ params }: PageProps) {
           else. Your queued photo was not submitted or paid — please claim a
           different target.
         </p>
-      </main>
+      </CaptureCard>
     );
   }
 
   if (phase === "done" && confirmation) {
     return (
-      <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-3 p-6">
-        <h1 className="text-lg font-semibold">
+      <CaptureCard>
+        <h1 className="font-heading text-xl font-bold">
           {confirmation.decision === "approved"
             ? "Placement approved!"
             : confirmation.decision === "rejected"
@@ -402,25 +425,29 @@ export default function SubmitCapturePage({ params }: PageProps) {
               : "Submitted — under review"}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Target status: {confirmation.targetState}
+          Target status:{" "}
+          <span className="font-mono text-foreground">
+            {confirmation.targetState}
+          </span>
         </p>
-        <p className="text-sm text-muted-foreground">
-          Your approved total: {confirmation.runningApprovedTotal}
-        </p>
+        <StatCard
+          label="Your approved total"
+          value={confirmation.runningApprovedTotal}
+        />
         <p
           data-testid="submit-duration-ms"
           data-value={Math.round(confirmation.submitDurationMs)}
-          className="text-xs text-muted-foreground"
+          className="font-mono text-xs text-muted-foreground"
         >
           Submitted in {Math.round(confirmation.submitDurationMs)}ms
         </p>
-      </main>
+      </CaptureCard>
     );
   }
 
   return (
-    <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
-      <h1 className="text-lg font-semibold">Post your flier</h1>
+    <CaptureCard>
+      <h1 className="font-heading text-xl font-bold">Post your flier</h1>
 
       {phase === "requesting-location" ? (
         <p className="text-sm text-muted-foreground">Getting your location…</p>
@@ -428,7 +455,7 @@ export default function SubmitCapturePage({ params }: PageProps) {
 
       <label
         data-testid="camera-capture-input"
-        className="flex h-10 cursor-pointer items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground data-disabled:pointer-events-none data-disabled:opacity-50"
+        className="flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-foreground/15 bg-primary text-base font-medium text-primary-foreground transition-transform active:translate-y-px data-disabled:pointer-events-none data-disabled:opacity-50"
         data-disabled={phase !== "ready" ? "" : undefined}
       >
         {phase === "processing" ? "Submitting…" : "Take a photo"}
@@ -447,7 +474,7 @@ export default function SubmitCapturePage({ params }: PageProps) {
 
       <label
         data-testid="gallery-fallback-input"
-        className="flex h-9 cursor-pointer items-center justify-center rounded-lg border border-input text-sm text-muted-foreground data-disabled:pointer-events-none data-disabled:opacity-50"
+        className="flex h-11 w-full cursor-pointer items-center justify-center rounded-xl border-2 border-foreground/15 bg-card text-sm text-muted-foreground data-disabled:pointer-events-none data-disabled:opacity-50"
         data-disabled={phase !== "ready" ? "" : undefined}
       >
         Choose from gallery instead
@@ -464,6 +491,6 @@ export default function SubmitCapturePage({ params }: PageProps) {
       </label>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-    </main>
+    </CaptureCard>
   );
 }

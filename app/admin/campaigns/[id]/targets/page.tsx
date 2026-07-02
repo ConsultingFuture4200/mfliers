@@ -20,6 +20,8 @@ import { auth } from "@/lib/auth/config";
 import { resolveStaffPrincipal } from "@/lib/auth/staff";
 import { getCampaignById } from "@/lib/db/dal/campaigns";
 import CampaignMap from "@/components/map/CampaignMap";
+import { PageShell } from "@/components/brand/PageShell";
+import { Card, CardContent } from "@/components/ui/card";
 import { TargetImportForm } from "./TargetImportForm";
 
 interface PageParams {
@@ -32,11 +34,15 @@ interface PageProps {
 
 function DeniedMessage({ message }: { message: string }) {
   return (
-    <main className="mx-auto max-w-2xl p-6">
-      <p className="text-sm text-destructive" data-testid="targets-denied">
-        {message}
-      </p>
-    </main>
+    <PageShell width="sm">
+      <Card className="border-2 border-foreground/15">
+        <CardContent>
+          <p className="text-sm text-destructive" data-testid="targets-denied">
+            {message}
+          </p>
+        </CardContent>
+      </Card>
+    </PageShell>
   );
 }
 
@@ -73,14 +79,17 @@ export default async function AdminTargetsPage({ params }: PageProps) {
   }
 
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
-      <h1 className="text-lg font-semibold">
-        Import targets — {campaign.name}
-      </h1>
-      <TargetImportForm campaignId={campaignId} />
-      <div className="min-h-[60vh] overflow-hidden rounded-lg border border-input">
-        <CampaignMap campaignId={campaignId} />
+    <PageShell
+      title={`Import targets — ${campaign.name}`}
+      description="Upload a CSV or drop a pin, then confirm the target set on the map."
+      width="lg"
+    >
+      <div className="flex flex-col gap-6">
+        <TargetImportForm campaignId={campaignId} />
+        <div className="min-h-[60vh] overflow-hidden rounded-2xl border-2 border-foreground/15 bg-card">
+          <CampaignMap campaignId={campaignId} />
+        </div>
       </div>
-    </main>
+    </PageShell>
   );
 }

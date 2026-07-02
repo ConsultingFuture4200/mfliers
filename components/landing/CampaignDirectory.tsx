@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { StatCard } from "@/components/brand/StatCard";
 
 interface DirectoryCampaign {
   id: string;
@@ -162,25 +163,37 @@ export default function CampaignDirectory() {
             key={campaign.id}
             data-testid="campaign-card"
             data-campaign-id={campaign.id}
-            className="flex flex-col gap-2 rounded-lg border border-border bg-background p-4 text-left transition-opacity duration-300 ease-out motion-reduce:transition-none motion-reduce:duration-0"
+            className="flex flex-col gap-3 rounded-2xl border-2 border-foreground/15 bg-card p-5 text-left transition-opacity duration-300 ease-out motion-reduce:transition-none motion-reduce:duration-0"
           >
-            <h3 className="text-base font-semibold">{campaign.name}</h3>
-            <p className="text-sm text-muted-foreground">{campaign.blurb}</p>
-            <p className="text-sm">
-              Coverage:{" "}
-              <span data-testid="campaign-coverage" className="font-medium">
-                {campaign.coveragePercent}%
-              </span>{" "}
-              ({campaign.greenTargets}/{campaign.totalTargets})
-            </p>
+            <div className="flex flex-col gap-1">
+              <h3 className="font-heading text-lg font-bold">
+                {campaign.name}
+              </h3>
+              <p className="text-sm text-muted-foreground">{campaign.blurb}</p>
+            </div>
+
+            <StatCard
+              label="Coverage"
+              value={
+                <span data-testid="campaign-coverage">
+                  {campaign.coveragePercent}%
+                </span>
+              }
+              hint={`${campaign.greenTargets}/${campaign.totalTargets} posted`}
+            />
+
             {join.status === "joined" ? (
-              <p data-testid="join-success" className="text-sm text-primary">
+              <p
+                data-testid="join-success"
+                className="text-sm font-medium text-primary"
+              >
                 Joined — head to the campaign map to start claiming targets.
               </p>
             ) : (
               <Button
                 data-testid="join-button"
                 type="button"
+                className="w-full"
                 disabled={join.status === "pending"}
                 onClick={() => void handleJoin(campaign.id)}
               >

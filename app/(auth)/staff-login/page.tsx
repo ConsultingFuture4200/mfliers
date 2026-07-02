@@ -11,6 +11,15 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Logo } from "@/components/brand/Logo";
 
 export default function StaffLoginPage() {
   const [email, setEmail] = useState("");
@@ -41,46 +50,70 @@ export default function StaffLoginPage() {
 
   if (success) {
     return (
-      <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
-        <h1 className="text-lg font-semibold">You&apos;re in.</h1>
-        <p className="text-sm text-muted-foreground">Logged in as {email}.</p>
+      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 p-6">
+        <div className="flex justify-center">
+          <Logo />
+        </div>
+        <Card className="rounded-2xl border-2 border-foreground/15">
+          <CardHeader>
+            <h1 className="font-heading text-xl font-semibold">
+              You&apos;re in.
+            </h1>
+            <CardDescription>Logged in as {email}.</CardDescription>
+          </CardHeader>
+        </Card>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-6 p-6">
-      <h1 className="text-lg font-semibold">Host / admin login</h1>
+    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 p-6">
+      <div className="flex justify-center">
+        <Logo />
+      </div>
+      <Card className="rounded-2xl border-2 border-foreground/15">
+        <CardHeader>
+          <h1 className="font-heading text-xl font-semibold">
+            Host / admin login
+          </h1>
+          <CardDescription>
+            Sign in with your email and password.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={pending}>
+              {pending ? "Signing in…" : "Sign in"}
+            </Button>
+          </form>
 
-      <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-        <label className="flex flex-col gap-1 text-sm">
-          Email
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="h-8 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Password
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="h-8 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          />
-        </label>
-        <Button type="submit" disabled={pending}>
-          {pending ? "Signing in…" : "Sign in"}
-        </Button>
-      </form>
-
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="mt-4 text-sm text-destructive">{error}</p>
+          ) : null}
+        </CardContent>
+      </Card>
     </main>
   );
 }

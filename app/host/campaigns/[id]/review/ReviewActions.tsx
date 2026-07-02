@@ -10,6 +10,7 @@
  */
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface ReviewActionsProps {
   campaignId: string;
@@ -66,14 +67,18 @@ export function ReviewActions({
 
   if (decided) {
     return (
-      <p className="text-sm text-muted-foreground" data-testid="review-decided">
+      <Badge
+        variant={decided === "approved" ? "default" : "destructive"}
+        className="w-fit"
+        data-testid="review-decided"
+      >
         {decided === "approved" ? "Approved." : "Rejected."}
-      </p>
+      </Badge>
     );
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Button
         type="button"
         disabled={pending}

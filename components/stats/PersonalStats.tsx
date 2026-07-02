@@ -11,6 +11,7 @@
  * function upstream keeps it as cents.
  */
 import type { PersonalStats as PersonalStatsData } from "@/lib/leaderboard/rank";
+import { StatCard } from "@/components/brand/StatCard";
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -22,31 +23,53 @@ export interface PersonalStatsProps {
 
 export function PersonalStats({ stats }: PersonalStatsProps) {
   return (
-    <dl
-      className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border border-input p-4 text-sm"
+    <div
+      className="grid grid-cols-2 gap-3 sm:grid-cols-3"
       data-testid="personal-stats"
     >
-      <dt className="text-muted-foreground">Approved</dt>
-      <dd data-testid="stat-approved-count">{stats.approvedCount}</dd>
-
-      <dt className="text-muted-foreground">Current tier</dt>
-      <dd data-testid="stat-current-tier">
-        {stats.currentTier > 0 ? `Tier ${stats.currentTier}` : "Not yet ranked"}
-      </dd>
-
-      <dt className="text-muted-foreground">Earned</dt>
-      <dd data-testid="stat-earned">{formatCents(stats.earnedCents)}</dd>
-
-      <dt className="text-muted-foreground">Fliers to next tier</dt>
-      <dd data-testid="stat-fliers-to-next-tier">
-        {stats.fliersToNextTier === null
-          ? "Top tier reached"
-          : stats.fliersToNextTier}
-      </dd>
-
-      <dt className="text-muted-foreground">Targets remaining</dt>
-      <dd data-testid="stat-targets-remaining">{stats.targetsRemaining}</dd>
-    </dl>
+      <StatCard
+        label="Approved"
+        value={
+          <span data-testid="stat-approved-count">{stats.approvedCount}</span>
+        }
+      />
+      <StatCard
+        label="Current tier"
+        value={
+          <span data-testid="stat-current-tier">
+            {stats.currentTier > 0
+              ? `Tier ${stats.currentTier}`
+              : "Not yet ranked"}
+          </span>
+        }
+      />
+      <StatCard
+        label="Earned"
+        value={
+          <span data-testid="stat-earned">
+            {formatCents(stats.earnedCents)}
+          </span>
+        }
+      />
+      <StatCard
+        label="Fliers to next tier"
+        value={
+          <span data-testid="stat-fliers-to-next-tier">
+            {stats.fliersToNextTier === null
+              ? "Top tier reached"
+              : stats.fliersToNextTier}
+          </span>
+        }
+      />
+      <StatCard
+        label="Targets remaining"
+        value={
+          <span data-testid="stat-targets-remaining">
+            {stats.targetsRemaining}
+          </span>
+        }
+      />
+    </div>
   );
 }
 
