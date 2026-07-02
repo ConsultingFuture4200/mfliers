@@ -51,6 +51,10 @@ import {
  * comment. */
 export interface UniversalMapPin extends PublicPin {
   campaignName: string;
+  /** The campaign's flier artwork (public `campaigns.flier_image_url`) — shown
+   * inside a posted (green) pin. This is the campaign flier, NOT a player's
+   * private submission photo (which stays gated by the privacy setting). */
+  flierImageUrl: string;
 }
 
 /**
@@ -80,6 +84,7 @@ export async function getUniversalMapPins(): Promise<UniversalMapPin[]> {
       return campaignPins.map((pin): UniversalMapPin => ({
         ...pin,
         campaignName: campaign.name,
+        flierImageUrl: campaign.flierImageUrl,
       }));
     }),
   );

@@ -57,12 +57,16 @@ import { useRouter } from "next/navigation";
 import type { GeoJSONSource } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Button } from "@/components/ui/button";
+import { StateBadge } from "@/components/brand/StateBadge";
+import { Pin } from "@/components/brand/Pin";
 import type { UniversalMapPin } from "@/lib/campaign/universal-map";
 
+// Field-guide pin hues (must be literal colors — Mapbox GL paint can't read
+// CSS vars; kept in sync with globals.css's --pin-* tokens).
 const PIN_COLORS: Record<UniversalMapPin["state"], string> = {
-  red: "#dc2626",
-  amber: "#d97706",
-  green: "#16a34a",
+  red: "#d2412e",
+  amber: "#e0a32e",
+  green: "#2f8f5b",
 };
 
 const PIN_STATE_LABEL: Record<UniversalMapPin["state"], string> = {
@@ -401,19 +405,21 @@ function PinFallbackList({
             data-state={pin.state}
             data-campaign-id={pin.campaignId}
             onClick={() => onTap(pin)}
-            className="flex w-full items-center gap-3 rounded-lg border border-input p-3 text-left text-sm"
+            className="flex w-full items-center gap-3 rounded-xl border-2 border-foreground/15 bg-card p-3 text-left text-sm transition-colors hover:bg-accent"
           >
-            <span
-              aria-hidden
-              className="size-3 shrink-0 rounded-full"
-              style={{ backgroundColor: PIN_COLORS[pin.state] }}
+            <Pin
+              state={pin.state}
+              flierUrl={
+                pin.state === "green"
+                  ? (pin.photoUrl ?? pin.flierImageUrl)
+                  : null
+              }
+              size={26}
             />
             <span className="flex-1">
               <span className="block font-medium">{pin.campaignName}</span>
-              <span className="text-xs text-muted-foreground">
-                {PIN_STATE_LABEL[pin.state]}
-              </span>
             </span>
+            <StateBadge state={pin.state} />
           </button>
         </li>
       ))}
@@ -433,36 +439,44 @@ function PinDetailPanel({
   return (
     <div
       data-testid="universal-pin-detail-panel"
-      className="relative z-10 mt-auto max-h-[60vh] overflow-auto rounded-t-xl border-t border-input bg-background p-4"
+      className="absolute inset-x-0 bottom-0 z-10 mx-auto max-h-[70vh] w-full max-w-md overflow-auto rounded-t-2xl border-2 border-foreground/15 bg-card p-4 shadow-lg sm:inset-x-auto sm:right-4 sm:bottom-4 sm:rounded-2xl"
     >
-      <div className="mb-2 flex items-center justify-between">
-        <h2
-          className="text-sm font-semibold"
-          data-testid="universal-pin-detail-campaign-name"
-        >
-          {pin.campaignName}
-        </h2>
-        <Button variant="ghost" onClick={onClose}>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-1">
+          <h2
+            className="font-heading text-base font-bold"
+            data-testid="universal-pin-detail-campaign-name"
+          >
+            {pin.campaignName}
+          </h2>
+          <StateBadge state={pin.state} className="w-fit" />
+        </div>
+        <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
       </div>
-      <p
-        className="text-xs text-muted-foreground"
-        data-testid="universal-pin-detail-state"
-      >
+      <p className="sr-only" data-testid="universal-pin-detail-state">
         Status: {PIN_STATE_LABEL[pin.state]}
       </p>
-      {pin.state === "green" && pin.photoUrl ? (
-        // Requirement 4: this is the public-safe photo the sanctioned
-        // universal read already exposes (T2.1) — never a username, see
-        // module/lib doc comments.
+      {pin.state === "green" ? (
+        // The posted flier: the sanctioned public photoUrl the universal read
+        // exposes (T2.1/ADR-0001), falling back to the campaign flier artwork
+        // when no submission photo is public. Never a username.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={pin.photoUrl}
-          alt={`Submitted flier placement for ${pin.campaignName}`}
-          className="mt-2 w-full rounded-md object-cover"
+          src={pin.photoUrl ?? pin.flierImageUrl}
+          alt={`${pin.campaignName} flier placement`}
+          className="mt-1 aspect-video w-full rounded-lg border-2 border-foreground/15 object-cover"
         />
       ) : null}
+      <a
+        href={`https://www.google.com/maps/search/?api=1&query=${pin.lat},${pin.long}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 block font-mono text-xs text-muted-foreground underline"
+      >
+        {pin.lat.toFixed(4)}, {pin.long.toFixed(4)} · Directions ↗
+      </a>
       <Button
         className="mt-3 w-full"
         data-testid="universal-pin-open-campaign"

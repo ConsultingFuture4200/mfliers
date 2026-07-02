@@ -40,15 +40,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Button } from "@/components/ui/button";
+import { StateBadge } from "@/components/brand/StateBadge";
+import { Pin } from "@/components/brand/Pin";
 import type { MapPin, TargetDetail } from "@/lib/campaign/map";
 
 /** Within the card's "5-10s" polling band (requirement 5). */
 const POLL_INTERVAL_MS = 7_000;
 
+// Field-guide pin hues (literal — Mapbox GL paint/markers can't read CSS vars;
+// kept in sync with globals.css's --pin-* tokens).
 const PIN_COLORS: Record<MapPin["state"], string> = {
-  red: "#dc2626",
-  amber: "#d97706",
-  green: "#16a34a",
+  red: "#d2412e",
+  amber: "#e0a32e",
+  green: "#2f8f5b",
 };
 
 const PIN_STATE_LABEL: Record<MapPin["state"], string> = {
@@ -118,16 +122,19 @@ export default function CampaignMap({ campaignId }: { campaignId: string }) {
     return () => clearInterval(interval);
   }, [fetchPins]);
 
+  // Claim a red target, then go straight to the capture screen to post the
+  // flier. Invoked from the pin detail sheet's "Claim & post flier" button
+  // (the submit option surfaced in the pin view) rather than on bare tap.
   const handleClaim = useCallback(
-    async (pin: MapPin) => {
+    async (targetId: string) => {
       setBanner(null);
       try {
         const res = await fetch(
-          `/api/campaigns/${campaignId}/targets/${pin.id}/claim`,
+          `/api/campaigns/${campaignId}/targets/${targetId}/claim`,
           { method: "POST" },
         );
         if (res.ok) {
-          router.push(`/campaigns/${campaignId}/submit/${pin.id}`);
+          router.push(`/campaigns/${campaignId}/submit/${targetId}`);
           return;
         }
         const body = (await res.json().catch(() => null)) as ErrorBody | null;
@@ -148,15 +155,11 @@ export default function CampaignMap({ campaignId }: { campaignId: string }) {
     [campaignId, router, fetchPins],
   );
 
+  // Tapping any pin opens its detail sheet (Google-Maps style). The sheet then
+  // surfaces the state-appropriate action (claim+post for red, info for
+  // amber, the posted flier for green) — see PinDetailPanel.
   const handleTap = useCallback(
     (pin: MapPin) => {
-      if (pin.state === "red") {
-        void handleClaim(pin);
-        return;
-      }
-      // Amber/green: card requirements 3/4 — open the tap-through detail
-      // (amber renders as purely informational once fetched; green adds
-      // photo/GPS/username per `getTargetDetail`'s privacy gate).
       void (async () => {
         setBanner(null);
         try {
@@ -174,7 +177,7 @@ export default function CampaignMap({ campaignId }: { campaignId: string }) {
         }
       })();
     },
-    [campaignId, handleClaim],
+    [campaignId],
   );
   // Kept in a ref so the marker-sync effect (below) doesn't need
   // `handleTap` in its dependency array — the marker DOM elements' click
@@ -329,7 +332,11 @@ export default function CampaignMap({ campaignId }: { campaignId: string }) {
       ) : null}
 
       {selected ? (
-        <PinDetailPanel detail={selected} onClose={() => setSelected(null)} />
+        <PinDetailPanel
+          detail={selected}
+          onClose={() => setSelected(null)}
+          onClaim={handleClaim}
+        />
       ) : null}
     </div>
   );
@@ -364,17 +371,11 @@ function PinFallbackList({
             data-testid={`map-pin-${pin.id}`}
             data-state={pin.state}
             onClick={() => onTap(pin)}
-            className="flex w-full items-center gap-3 rounded-lg border border-input p-3 text-left text-sm"
+            className="flex w-full items-center gap-3 rounded-xl border-2 border-foreground/15 bg-card p-3 text-left text-sm transition-colors hover:bg-accent"
           >
-            <span
-              aria-hidden
-              className="size-3 shrink-0 rounded-full"
-              style={{ backgroundColor: PIN_COLORS[pin.state] }}
-            />
-            <span className="flex-1">{pin.label}</span>
-            <span className="text-xs text-muted-foreground">
-              {PIN_STATE_LABEL[pin.state]}
-            </span>
+            <Pin state={pin.state} size={26} />
+            <span className="flex-1 font-medium">{pin.label}</span>
+            <StateBadge state={pin.state} />
           </button>
         </li>
       ))}
@@ -385,49 +386,77 @@ function PinFallbackList({
 function PinDetailPanel({
   detail,
   onClose,
+  onClaim,
 }: {
   detail: TargetDetail;
   onClose: () => void;
+  onClaim: (targetId: string) => void;
 }) {
   return (
     <div
       data-testid="pin-detail-panel"
-      className="relative z-10 mt-auto max-h-[60vh] overflow-auto rounded-t-xl border-t border-input bg-background p-4"
+      className="absolute inset-x-0 bottom-0 z-10 mx-auto max-h-[70vh] w-full max-w-md overflow-auto rounded-t-2xl border-2 border-foreground/15 bg-card p-4 shadow-lg sm:inset-x-auto sm:right-4 sm:bottom-4 sm:rounded-2xl"
     >
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold">{detail.label}</h2>
-        <Button variant="ghost" onClick={onClose}>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-1">
+          <h2 className="font-heading text-base font-bold">{detail.label}</h2>
+          <StateBadge state={detail.state} className="w-fit" />
+        </div>
+        <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
       </div>
-      <p
-        className="text-xs text-muted-foreground"
-        data-testid="pin-detail-state"
-      >
+      <p className="sr-only" data-testid="pin-detail-state">
         Status: {PIN_STATE_LABEL[detail.state]}
       </p>
+
+      <a
+        href={`https://www.google.com/maps/search/?api=1&query=${detail.lat},${detail.long}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block font-mono text-xs text-muted-foreground underline"
+      >
+        {detail.lat.toFixed(4)}, {detail.long.toFixed(4)} · Directions ↗
+      </a>
+
+      {detail.state === "red" ? (
+        <Button
+          className="mt-3 w-full"
+          data-testid="pin-claim-button"
+          onClick={() => onClaim(detail.id)}
+        >
+          Claim &amp; post flier
+        </Button>
+      ) : null}
+
+      {detail.state === "amber" ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          Claimed by a canvasser — awaiting a posted flier.
+        </p>
+      ) : null}
+
       {detail.state === "green" ? (
         <>
           {detail.photoUrl ? (
-            // Signed R2 URLs are short-lived and per-request, same
-            // reasoning as the T4.2 review-queue card's photo (`ReviewCard`).
+            // Signed R2 URLs are short-lived and per-request, same reasoning
+            // as the T4.2 review-queue card's photo (`ReviewCard`).
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={detail.photoUrl}
-              alt={`Submitted flier placement for ${detail.label}`}
-              className="mt-2 w-full rounded-md object-cover"
+              alt={`Posted flier at ${detail.label}`}
+              className="mt-3 aspect-video w-full rounded-lg border-2 border-foreground/15 object-cover"
             />
           ) : null}
           {detail.submissionGps ? (
             <p
-              className="mt-2 text-xs text-muted-foreground"
+              className="mt-2 font-mono text-xs text-muted-foreground"
               data-testid="pin-detail-gps"
             >
               {detail.submissionGps.lat.toFixed(5)},{" "}
               {detail.submissionGps.long.toFixed(5)}
             </p>
           ) : null}
-          <p className="mt-1 text-sm" data-testid="pin-detail-username">
+          <p className="mt-2 text-sm" data-testid="pin-detail-username">
             {detail.username ?? "Canvasser (hidden)"}
           </p>
         </>

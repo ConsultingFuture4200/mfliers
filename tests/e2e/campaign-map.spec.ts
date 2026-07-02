@@ -83,6 +83,27 @@ test.describe("per-campaign map", () => {
     page,
   }) => {
     await mockPins(page);
+    // Tapping a pin now opens its detail sheet (which fetches the target),
+    // then the "Claim & post flier" button drives the claim → capture route.
+    await page.route(
+      `**/api/campaigns/${CAMPAIGN_ID}/targets/${RED_ID}`,
+      async (route) => {
+        await route.fulfill({
+          json: {
+            target: {
+              id: RED_ID,
+              label: "Red Target",
+              lat: 46.9,
+              long: -123.8,
+              state: "red",
+              photoUrl: null,
+              submissionGps: null,
+              username: null,
+            },
+          },
+        });
+      },
+    );
     await page.route(
       `**/api/campaigns/${CAMPAIGN_ID}/targets/${RED_ID}/claim`,
       async (route) => {
@@ -92,6 +113,7 @@ test.describe("per-campaign map", () => {
 
     await page.goto(`/campaigns/${CAMPAIGN_ID}/map`);
     await page.locator(`[data-testid="map-pin-${RED_ID}"]`).click();
+    await page.locator('[data-testid="pin-claim-button"]').click();
 
     await expect(page).toHaveURL(`/campaigns/${CAMPAIGN_ID}/submit/${RED_ID}`);
   });
@@ -100,6 +122,25 @@ test.describe("per-campaign map", () => {
     page,
   }) => {
     await mockPins(page);
+    await page.route(
+      `**/api/campaigns/${CAMPAIGN_ID}/targets/${RED_ID}`,
+      async (route) => {
+        await route.fulfill({
+          json: {
+            target: {
+              id: RED_ID,
+              label: "Red Target",
+              lat: 46.9,
+              long: -123.8,
+              state: "red",
+              photoUrl: null,
+              submissionGps: null,
+              username: null,
+            },
+          },
+        });
+      },
+    );
     await page.route(
       `**/api/campaigns/${CAMPAIGN_ID}/targets/${RED_ID}/claim`,
       async (route) => {
@@ -112,6 +153,7 @@ test.describe("per-campaign map", () => {
 
     await page.goto(`/campaigns/${CAMPAIGN_ID}/map`);
     await page.locator(`[data-testid="map-pin-${RED_ID}"]`).click();
+    await page.locator('[data-testid="pin-claim-button"]').click();
 
     await expect(page.locator('[data-testid="map-banner"]')).toHaveText(
       "Someone else already claimed this target.",

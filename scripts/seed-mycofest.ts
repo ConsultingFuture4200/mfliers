@@ -102,7 +102,7 @@ async function main(): Promise<void> {
 
   const campaign = await createCampaign(adminPrincipal, {
     name: "Mycofest",
-    flierImageUrl: "https://example.com/fliers/mycofest.png",
+    flierImageUrl: "/mycofest-flier.svg",
     budgetCapCents: MYCOFEST_BUDGET_CAP_CENTS,
     tierTable: MYCOFEST_TIER_TABLE,
     grandPrize: MYCOFEST_GRAND_PRIZE,

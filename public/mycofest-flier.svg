@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270" role="img" aria-label="Mycofest flier">
+  <rect width="480" height="270" fill="#f6f4ed"/>
+  <rect x="8" y="8" width="464" height="254" fill="none" stroke="#0d1b14" stroke-width="4"/>
+  <g transform="translate(240 96)">
+    <path d="M0 -34 C 22 -34 34 -20 34 0 C 34 24 8 30 0 56 C -8 30 -34 24 -34 0 C -34 -20 -22 -34 0 -34 Z" fill="#d2412e" stroke="#0d1b14" stroke-width="3"/>
+    <circle cx="0" cy="-2" r="9" fill="#f6f4ed"/>
+  </g>
+  <text x="240" y="176" text-anchor="middle" font-family="'Space Grotesk',sans-serif" font-size="40" font-weight="700" fill="#1c5c39">MYCOFEST</text>
+  <text x="240" y="206" text-anchor="middle" font-family="monospace" font-size="15" letter-spacing="3" fill="#5d6b60">CANVASSING · POST THE FLIER</text>
+  <text x="240" y="236" text-anchor="middle" font-family="Inter,sans-serif" font-size="14" fill="#0d1b14">Claim a target · Snap a geotagged photo · Get paid</text>
+</svg>
