@@ -10,11 +10,26 @@
  */
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 type Step = "email" | "code";
 
+/**
+ * Returns a safe internal redirect target from `?callbackUrl=`, defaulting to
+ * the landing page. Only same-origin relative paths are honored (must start
+ * with a single "/" — rejects "//host" and absolute URLs) to avoid an
+ * open-redirect through the login flow.
+ */
+function safeCallbackUrl(): string {
+  if (typeof window === "undefined") return "/";
+  const raw = new URLSearchParams(window.location.search).get("callbackUrl");
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return "/";
+}
+
 export default function PlayerLoginPage() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -60,6 +75,12 @@ export default function PlayerLoginPage() {
         return;
       }
       setSuccess(true);
+      // Land the player somewhere useful (where they came from, or the
+      // campaign directory) instead of a dead-end confirmation. refresh()
+      // re-runs Server Components so the new session is reflected.
+      const dest = safeCallbackUrl();
+      router.replace(dest);
+      router.refresh();
     } finally {
       setPending(false);
     }
@@ -69,7 +90,12 @@ export default function PlayerLoginPage() {
     return (
       <main className="mx-auto flex max-w-sm flex-1 flex-col justify-center gap-4 p-6">
         <h1 className="text-lg font-semibold">You&apos;re in.</h1>
-        <p className="text-sm text-muted-foreground">Logged in as {email}.</p>
+        <p className="text-sm text-muted-foreground">
+          Logged in as {email}. Taking you to the campaigns…
+        </p>
+        <a href={safeCallbackUrl()} className="text-sm underline">
+          Continue
+        </a>
       </main>
     );
   }
