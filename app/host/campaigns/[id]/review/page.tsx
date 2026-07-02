@@ -65,7 +65,7 @@ function ReviewCard({ item }: { item: ReviewQueueItem }) {
           {distanceM !== null ? `${distanceM.toFixed(1)} m` : "unknown"}
         </dd>
         <dt className="text-muted-foreground">Canvasser</dt>
-        <dd data-testid="review-canvasser">{player?.phone ?? "unknown"}</dd>
+        <dd data-testid="review-canvasser">{player?.email ?? "unknown"}</dd>
         <dt className="text-muted-foreground">Received</dt>
         <dd>{submission.receivedAt.toISOString()}</dd>
       </dl>

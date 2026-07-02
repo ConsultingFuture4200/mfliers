@@ -137,9 +137,9 @@ export interface TargetDetail {
    * sensitive as their photo. */
   submissionGps: Coordinate | null;
   /**
-   * The canvasser's phone number, standing in for "username" (the
+   * The canvasser's email address, standing in for "username" (the
    * platform has no separate handle: `types/domain.ts`'s `Player` is just
-   * `{ id, phone }`). `null` when the pin isn't filled yet, or when it is
+   * `{ id, email }`). `null` when the pin isn't filled yet, or when it is
    * but `principal` isn't privileged to see it under
    * `campaign.privacySetting` (PRD FR-M4 default: admin-only). This gate
    * is independent of `photoUrl`/`submissionGps`'s membership gate: a
@@ -220,6 +220,6 @@ export async function getTargetDetail(
     photoUrl,
     submissionGps:
       canSeeSensitiveDetail && submission ? submission.deviceGps : null,
-    username: usernameAllowed ? (player?.phone ?? null) : null,
+    username: usernameAllowed ? (player?.email ?? null) : null,
   };
 }

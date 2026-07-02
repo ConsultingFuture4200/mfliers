@@ -45,7 +45,9 @@ describe.skipIf(!hasTestDatabase())("target claim state machine (T3.2)", () => {
   async function insertSecondPlayer(): Promise<string> {
     const [row] = await db!
       .insert(schema.players)
-      .values({ phone: `+1555000${Math.floor(Math.random() * 10000)}` })
+      .values({
+        email: `player-${Math.floor(Math.random() * 1000000)}@example.com`,
+      })
       .returning({ id: schema.players.id });
     return row.id;
   }

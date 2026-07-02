@@ -294,7 +294,7 @@ describe.skipIf(!hasTestDatabase())("lib/campaign/map.ts", () => {
       expect(detail.photoUrl).toBeNull();
       expect(detail.submissionGps).toBeNull();
       // Username's own, independent gate is unaffected by this fix.
-      expect(detail.username).toBe("+15550001111");
+      expect(detail.username).toBe("campaign-a-player@example.com");
     });
 
     it("shows a filled pin's photo and GPS to a player who IS a member of this campaign", async () => {
@@ -318,7 +318,7 @@ describe.skipIf(!hasTestDatabase())("lib/campaign/map.ts", () => {
         seed.campaignA.campaignId,
         seed.campaignA.targetIds[0],
       );
-      expect(detail.username).toBe("+15550001111");
+      expect(detail.username).toBe("campaign-a-player@example.com");
     });
 
     it("always shows the canvasser's username to staff, regardless of privacy setting", async () => {
@@ -330,7 +330,7 @@ describe.skipIf(!hasTestDatabase())("lib/campaign/map.ts", () => {
         seed.campaignA.campaignId,
         seed.campaignA.targetIds[0],
       );
-      expect(detail.username).toBe("+15550001111");
+      expect(detail.username).toBe("campaign-a-player@example.com");
     });
 
     it("denies a host scoped to a different campaign", async () => {

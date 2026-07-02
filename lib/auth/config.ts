@@ -4,25 +4,25 @@
  * provider to this same config per the batch-2 card: "T2.3 ... coordinates
  * with T2.2 (shared Auth.js setup)").
  *
- * Constitution §2: auth provider is Auth.js (NextAuth) + Twilio Verify for
- * players, email+password for host/admin. Constitution §5/§8: `AUTH_SECRET`
- * and Twilio credentials come from env only (NextAuth auto-infers
- * `AUTH_SECRET`); nothing here is importable from a client component (this
- * whole module runs server-side).
+ * Constitution §2 (as amended by ADR-0003): auth provider is Auth.js
+ * (NextAuth) with an email one-time-code flow for players, email+password
+ * for host/admin. Constitution §5/§8: `AUTH_SECRET` and all email-provider
+ * credentials come from env only (NextAuth auto-infers `AUTH_SECRET`);
+ * nothing here is importable from a client component (this whole module
+ * runs server-side).
  *
  * Provider 1: a Credentials provider named `player-otp`. `authorize()`
- * verifies the OTP via Twilio (through `lib/auth/player.ts` — domain logic
- * lives in `lib/`, not here) and returns a `player` principal on success.
- * The client calls `signIn("player-otp", { phone, code })`, which posts to
- * Auth.js's own `/api/auth/callback/player-otp` endpoint (wired up by
+ * verifies the emailed code via `lib/auth/player.ts` (domain logic lives in
+ * `lib/`, not here) and returns a `player` principal on success. The client
+ * calls `signIn("player-otp", { email, code })`, which posts to Auth.js's
+ * own `/api/auth/callback/player-otp` endpoint (wired up by
  * `app/api/auth/[...nextauth]/route.ts`) — this *is* the "verify" route the
  * card allows as an alternative to a hand-written
  * `app/api/auth/otp/verify/route.ts`, and it's the right choice here: the
- * OTP send/check is a stateful, one-time Twilio operation, so having
- * exactly one call site (`authorize`) that checks the code avoids a second,
- * separate verify route either duplicating that check (Twilio would reject
- * the second check of an already-consumed code) or being the sole trusted
- * checker while Auth.js's own callback is bypassed.
+ * code is single-use (consumed on the first correct check), so having
+ * exactly one call site (`authorize`) that checks it avoids a second,
+ * separate verify route either double-consuming the code or being the sole
+ * trusted checker while Auth.js's own callback is bypassed.
  *
  * Provider 2: a Credentials provider named `staff-credentials` (T2.3).
  * `authorize()` verifies email+password via `lib/auth/staff.ts` and returns
@@ -185,15 +185,15 @@ export function sessionFromToken(
  * `null` -> failed sign-in, no session).
  */
 export async function authorizePlayerOtp(
-  credentials: Partial<Record<"phone" | "code", unknown>>,
+  credentials: Partial<Record<"email" | "code", unknown>>,
 ): Promise<{ id: string; playerId: string; principalType: "player" }> {
-  const phone = credentials.phone;
+  const email = credentials.email;
   const code = credentials.code;
-  if (typeof phone !== "string" || typeof code !== "string") {
+  if (typeof email !== "string" || typeof code !== "string") {
     throw new InvalidOtpError();
   }
 
-  const result = await verifyPlayerOtp(phone, code);
+  const result = await verifyPlayerOtp(email, code);
   if (!result) throw new InvalidOtpError();
 
   return {
@@ -241,9 +241,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       id: "player-otp",
-      name: "Phone (OTP)",
+      name: "Email (OTP)",
       credentials: {
-        phone: { label: "Phone number", type: "tel" },
+        email: { label: "Email", type: "email" },
         code: { label: "Verification code", type: "text" },
       },
       authorize: authorizePlayerOtp,

@@ -123,10 +123,10 @@ async function insertCampaign(
   return row.id;
 }
 
-async function insertPlayer(db: TestDb, phone: string): Promise<string> {
+async function insertPlayer(db: TestDb, email: string): Promise<string> {
   const [row] = await db
     .insert(schema.players)
-    .values({ phone })
+    .values({ email })
     .returning({ id: schema.players.id });
   return row.id;
 }
@@ -197,7 +197,7 @@ describe.skipIf(!hasTestDatabase())("payout ledger accrual (T4.3)", () => {
       budgetCapCents: 100_000_00, // budget is not the point of this test
       hostId,
     });
-    const playerId = await insertPlayer(db!, "+15550009999");
+    const playerId = await insertPlayer(db!, "u15550009999@example.com");
 
     // 26 sequential accruals — no pre-existing campaign_memberships row for
     // this player, so the first accrual must also create it (upsert).
@@ -244,7 +244,7 @@ describe.skipIf(!hasTestDatabase())("payout ledger accrual (T4.3)", () => {
       budgetCapCents: 100_000_00,
       hostId,
     });
-    const playerId = await insertPlayer(db!, "+15550008888");
+    const playerId = await insertPlayer(db!, "u15550008888@example.com");
     const targetId = await insertTarget(db!, campaignId, "Target 1");
     const submissionId = await insertApprovedSubmission(
       db!,
@@ -275,7 +275,7 @@ describe.skipIf(!hasTestDatabase())("payout ledger accrual (T4.3)", () => {
       budgetCapCents: 100_000_00,
       hostId,
     });
-    const playerId = await insertPlayer(db!, "+15550007777");
+    const playerId = await insertPlayer(db!, "u15550007777@example.com");
     const targetId = await insertTarget(db!, campaignId, "Target 1");
     const submissionId = await insertApprovedSubmission(
       db!,
@@ -308,7 +308,7 @@ describe.skipIf(!hasTestDatabase())("payout ledger accrual (T4.3)", () => {
       budgetCapCents: 1_200, // room for exactly two $5 accruals, not three
       hostId,
     });
-    const playerId = await insertPlayer(db!, "+15550006666");
+    const playerId = await insertPlayer(db!, "u15550006666@example.com");
 
     async function accrueOne() {
       const targetId = await insertTarget(db!, campaignId, "Target");
@@ -350,8 +350,8 @@ describe.skipIf(!hasTestDatabase())("payout ledger accrual (T4.3)", () => {
       budgetCapCents: 1_000, // only one of two concurrent $6 accruals fits
       hostId,
     });
-    const playerA = await insertPlayer(db!, "+15550005551");
-    const playerB = await insertPlayer(db!, "+15550005552");
+    const playerA = await insertPlayer(db!, "u15550005551@example.com");
+    const playerB = await insertPlayer(db!, "u15550005552@example.com");
     const targetA = await insertTarget(db!, campaignId, "Target A");
     const targetB = await insertTarget(db!, campaignId, "Target B");
     const submissionA = await insertApprovedSubmission(
@@ -389,7 +389,7 @@ describe.skipIf(!hasTestDatabase())("payout ledger accrual (T4.3)", () => {
       budgetCapCents: 1_000, // 80% == 800
       hostId,
     });
-    const playerId = await insertPlayer(db!, "+15550004444");
+    const playerId = await insertPlayer(db!, "u15550004444@example.com");
 
     async function accrueOne() {
       const targetId = await insertTarget(db!, campaignId, "Target");
@@ -417,8 +417,11 @@ describe.skipIf(!hasTestDatabase())("payout ledger accrual (T4.3)", () => {
       budgetCapCents: 100_000_00,
       hostId,
     });
-    const playerId = await insertPlayer(db!, "+15550003333");
-    const noSubmissionsPlayer = await insertPlayer(db!, "+15550003334");
+    const playerId = await insertPlayer(db!, "u15550003333@example.com");
+    const noSubmissionsPlayer = await insertPlayer(
+      db!,
+      "u15550003334@example.com",
+    );
 
     expect(await balanceOwed(campaignId, noSubmissionsPlayer)).toBe(0);
 
@@ -454,7 +457,7 @@ describe.skipIf(!hasTestDatabase())("payout ledger accrual (T4.3)", () => {
       budgetCapCents: 100_000_00,
       hostId,
     });
-    const playerId = await insertPlayer(db!, "+15550002222");
+    const playerId = await insertPlayer(db!, "u15550002222@example.com");
     const targetId = await insertTarget(db!, campaignId, "Target");
     const submissionId = await insertApprovedSubmission(
       db!,
@@ -526,7 +529,7 @@ describe.skipIf(!hasTestDatabase())("payout ledger accrual (T4.3)", () => {
       budgetCapCents: 1_000_00,
       hostId,
     });
-    const playerId = await insertPlayer(db!, "+15550001111");
+    const playerId = await insertPlayer(db!, "u15550001111@example.com");
     const targetId = await insertTarget(db!, campaignId, "Target");
     const submissionId = await insertApprovedSubmission(
       db!,

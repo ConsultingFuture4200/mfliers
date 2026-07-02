@@ -106,7 +106,7 @@ describe("POST /api/campaigns/[id]/submissions", () => {
     } as never);
     vi.mocked(getPlayerById).mockResolvedValue({
       id: PLAYER_ID,
-      phone: "+15555550123",
+      email: "submitter@example.com",
     });
     vi.mocked(submitCapture).mockResolvedValue({
       submissionId: SUBMISSION_ID,
@@ -126,7 +126,7 @@ describe("POST /api/campaigns/[id]/submissions", () => {
     expect(body.runningApprovedTotal).toBe(1);
     expect(submitCapture).toHaveBeenCalledWith(
       CAMPAIGN_ID,
-      { id: PLAYER_ID, phone: "+15555550123" },
+      { id: PLAYER_ID, email: "submitter@example.com" },
       expect.objectContaining({
         targetId: TARGET_ID,
         submissionId: SUBMISSION_ID,
@@ -141,7 +141,7 @@ describe("POST /api/campaigns/[id]/submissions", () => {
     } as never);
     vi.mocked(getPlayerById).mockResolvedValue({
       id: PLAYER_ID,
-      phone: "+15555550123",
+      email: "submitter@example.com",
     });
     vi.mocked(submitCapture).mockRejectedValue(
       new TargetNotClaimedError(CAMPAIGN_ID, TARGET_ID),

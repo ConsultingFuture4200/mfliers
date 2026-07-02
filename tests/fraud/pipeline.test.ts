@@ -69,7 +69,7 @@ function buildCampaign(
 }
 
 function buildPlayer(playerId: string): Player {
-  return { id: playerId, phone: "+15559990000" };
+  return { id: playerId, email: "pipeline-player@example.com" };
 }
 
 describe.skipIf(!hasTestDatabase())(

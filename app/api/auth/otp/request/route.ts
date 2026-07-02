@@ -1,14 +1,20 @@
 /**
- * POST /api/auth/otp/request — requests a fresh Twilio Verify OTP for a
- * phone number (T2.2). Thin route handler; the actual send + rate-limit
- * logic lives in `lib/auth/player.ts` (constitution §6: domain logic in
- * `lib/`, never in route handlers).
+ * POST /api/auth/otp/request — requests a fresh email one-time-code for an
+ * email address (ADR-0003). Thin route handler; the actual code generation,
+ * hashing, storage, send, and rate-limit logic lives in `lib/auth/player.ts`
+ * (constitution §6: domain logic in `lib/`, never in route handlers). The
+ * code itself is delivered only by email and is never included in this
+ * response.
  */
 import { NextResponse } from "next/server";
-import { requestPlayerOtp, OtpRateLimitError } from "@/lib/auth/player";
+import {
+  requestPlayerOtp,
+  OtpRateLimitError,
+  InvalidEmailError,
+} from "@/lib/auth/player";
 
 interface RequestOtpBody {
-  phone?: unknown;
+  email?: unknown;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -22,13 +28,13 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const phone = body.phone;
-  if (typeof phone !== "string" || phone.trim().length === 0) {
+  const email = body.email;
+  if (typeof email !== "string" || email.trim().length === 0) {
     return NextResponse.json(
       {
         error: {
-          code: "invalid_phone",
-          message: "A non-empty `phone` string is required.",
+          code: "invalid_email",
+          message: "A non-empty `email` string is required.",
         },
       },
       { status: 400 },
@@ -36,8 +42,14 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    await requestPlayerOtp(phone);
+    await requestPlayerOtp(email);
   } catch (err) {
+    if (err instanceof InvalidEmailError) {
+      return NextResponse.json(
+        { error: { code: "invalid_email", message: err.message } },
+        { status: 400 },
+      );
+    }
     if (err instanceof OtpRateLimitError) {
       return NextResponse.json(
         { error: { code: "rate_limited", message: err.message } },
@@ -49,8 +61,8 @@ export async function POST(request: Request): Promise<Response> {
         },
       );
     }
-    // A genuine Twilio/upstream failure — never leak upstream error detail
-    // (may include account-level info) to the client.
+    // A genuine email-provider/upstream failure — never leak upstream error
+    // detail (may include account-level info) to the client.
     return NextResponse.json(
       {
         error: {

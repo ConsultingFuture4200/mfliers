@@ -128,11 +128,11 @@ export interface Submission {
   decidedAt: Date | null;
 }
 
-/** A player account. Phone number is the global login identity across all
+/** A player account. Email address is the global login identity across all
  * campaigns. */
 export interface Player {
   id: string;
-  phone: string;
+  email: string;
 }
 
 /** A player's participation record within a single campaign. */

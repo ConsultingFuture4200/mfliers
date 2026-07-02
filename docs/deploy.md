@@ -85,7 +85,9 @@ hardcode it.
 | Env var(s) | Unlocks | Without it |
 |---|---|---|
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | Mapbox base tiles on the maps | Map falls back to a plain pin list |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_VERIFY_SERVICE_SID` | Player phone-OTP login | OTP send/verify fails |
+| `RESEND_API_KEY` + `EMAIL_FROM` (or `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS` + `EMAIL_FROM`) | Player email one-time-code login (ADR-0003) | The code is logged server-side instead of emailed (flow still testable) |
 | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_PUBLIC_URL` | Photo upload on submission | "Could not prepare the photo upload" |
+
+Player login is **email one-time-code** (was phone-OTP; changed per operator direction, recorded in `docs/decisions/0003-player-email-otp.md`). The email transport resolves at runtime: Resend (if `RESEND_API_KEY`) → SMTP (if `SMTP_*`) → server-log fallback.
 
 Add any of these with `vercel env add <NAME> production` (and `preview`), then redeploy.

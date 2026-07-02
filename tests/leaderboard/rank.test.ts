@@ -272,10 +272,10 @@ describe.skipIf(!hasTestDatabase())(
       return { campaignId: campaign.id, targetId: target.id };
     }
 
-    async function insertPlayer(phone: string): Promise<string> {
+    async function insertPlayer(email: string): Promise<string> {
       const [row] = await db!
         .insert(schema.players)
-        .values({ phone })
+        .values({ email })
         .returning({ id: schema.players.id });
       return row.id;
     }
@@ -306,7 +306,7 @@ describe.skipIf(!hasTestDatabase())(
         hostId,
         "Ledger-backed stats",
       );
-      const playerId = await insertPlayer("+15550001111");
+      const playerId = await insertPlayer("u15550001111@example.com");
 
       // Ten approvals (tier 1, $1.25 each) — one flier short of tier 2.
       // `accrue()` only writes the ledger/membership counters (T4.3); it
@@ -351,8 +351,8 @@ describe.skipIf(!hasTestDatabase())(
         "Live leaderboard",
       );
 
-      const leaderId = await insertPlayer("+15550002222");
-      const runnerUpId = await insertPlayer("+15550003333");
+      const leaderId = await insertPlayer("u15550002222@example.com");
+      const runnerUpId = await insertPlayer("u15550003333@example.com");
 
       for (let i = 0; i < 3; i++) {
         const [target] = await db!
@@ -404,8 +404,8 @@ describe.skipIf(!hasTestDatabase())(
         hostId,
         "Closing campaign",
       );
-      const winnerId = await insertPlayer("+15550004444");
-      const runnerUpId = await insertPlayer("+15550005555");
+      const winnerId = await insertPlayer("u15550004444@example.com");
+      const runnerUpId = await insertPlayer("u15550005555@example.com");
 
       const winnerSubmissionId = await insertApprovedSubmission(
         campaignId,
@@ -448,8 +448,8 @@ describe.skipIf(!hasTestDatabase())(
       const { campaignId: campaignB, targetId: targetB } =
         await insertLiveCampaignWithTarget(hostId, "Campaign B");
 
-      const playerAId = await insertPlayer("+15550006666");
-      const playerBId = await insertPlayer("+15550007777");
+      const playerAId = await insertPlayer("u15550006666@example.com");
+      const playerBId = await insertPlayer("u15550007777@example.com");
 
       const subA = await insertApprovedSubmission(
         campaignA,

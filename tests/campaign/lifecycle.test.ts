@@ -340,12 +340,12 @@ describe.skipIf(!hasTestDatabase())("campaign lifecycle (T3.1)", () => {
     async function insertPlayerWithApprovedSubmissions(
       campaignId: string,
       targetId: string,
-      phone: string,
+      email: string,
       approvedTimestamps: Date[],
     ): Promise<string> {
       const [player] = await db!
         .insert(schema.players)
-        .values({ phone })
+        .values({ email })
         .returning({ id: schema.players.id });
 
       await db!.insert(schema.campaignMemberships).values({
@@ -427,20 +427,20 @@ describe.skipIf(!hasTestDatabase())("campaign lifecycle (T3.1)", () => {
       const earlybirdId = await insertPlayerWithApprovedSubmissions(
         campaign.id,
         targetId,
-        "+15559990001",
+        "u15559990001@example.com",
         [new Date("2026-07-05T10:00:00Z"), new Date("2026-07-06T10:00:00Z")],
       );
       const latecomerId = await insertPlayerWithApprovedSubmissions(
         campaign.id,
         targetId,
-        "+15559990002",
+        "u15559990002@example.com",
         [new Date("2026-07-05T09:00:00Z"), new Date("2026-07-07T10:00:00Z")],
       );
       // A third player with fewer approvals must rank below both.
       const stragglerId = await insertPlayerWithApprovedSubmissions(
         campaign.id,
         targetId,
-        "+15559990003",
+        "u15559990003@example.com",
         [new Date("2026-07-05T08:00:00Z")],
       );
 

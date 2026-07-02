@@ -35,14 +35,14 @@ const DEFAULT_TIER_TABLE: TierTable = [
 
 interface SeedCampaignOptions {
   name: string;
-  phone: string;
+  email: string;
   /** Base coordinate the campaign's targets are placed around. */
   center: { lat: number; long: number };
 }
 
 async function seedCampaign(
   db: TestDb,
-  { name, phone, center }: SeedCampaignOptions,
+  { name, email, center }: SeedCampaignOptions,
 ): Promise<SeededCampaign> {
   const [host] = await db
     .insert(schema.users)
@@ -75,7 +75,7 @@ async function seedCampaign(
 
   const [player] = await db
     .insert(schema.players)
-    .values({ phone })
+    .values({ email })
     .returning({ id: schema.players.id });
 
   await db.insert(schema.campaignMemberships).values({
@@ -121,12 +121,12 @@ export async function seedTwoCampaigns(
 ): Promise<SeedTwoCampaignsResult> {
   const campaignA = await seedCampaign(db, {
     name: "Campaign A",
-    phone: "+15550001111",
+    email: "campaign-a-player@example.com",
     center: { lat: 46.9, long: -123.8 }, // Pacific County, WA area
   });
   const campaignB = await seedCampaign(db, {
     name: "Campaign B",
-    phone: "+15550002222",
+    email: "campaign-b-player@example.com",
     center: { lat: 40.7, long: -74.0 }, // NYC area — far from Campaign A
   });
 

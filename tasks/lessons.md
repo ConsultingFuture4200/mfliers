@@ -1457,3 +1457,10 @@ agent doesn't relearn them (CLAUDE.md §"Self-improvement loop").
   persist between commands): `DATABASE_URL` (live PostGIS), `AUTH_SECRET` (any value,
   for the e2e webserver), and dummy `R2_*` vars (the signed-PUT is generated offline
   and intercepted in e2e; no live R2 needed). See `docs/seed.md`.
+- **Player login is email one-time-code, not phone-OTP (ADR-0003).** Operator-directed
+  amendment of constitution §2/§5 and PRD FR-A1: `players.email` (not `phone`) is the
+  global identity; codes live hashed in `player_email_otp` (10-min expiry, 5-attempt cap,
+  single-use); `lib/auth/email.ts` resolves its transport (Resend REST / SMTP nodemailer /
+  dev-log fallback) from env at call time. Trade-off: loses the "street-worker, no-email"
+  benefit the PRD cited. Constitution/PRD/CLAUDE prose still say phone-OTP — the ADR is the
+  amendment of record; propagate via Scribe, don't assume the prose is current.

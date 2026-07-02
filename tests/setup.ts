@@ -72,6 +72,7 @@ export async function resetTestDb(testDb: TestDb): Promise<void> {
       targets,
       user_campaigns,
       campaigns,
+      player_email_otp,
       players,
       users
     RESTART IDENTITY CASCADE

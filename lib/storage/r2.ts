@@ -20,9 +20,9 @@
  * Every exported function accepts an optional `S3Client`/config override
  * so callers (and tests, against a local S3-compatible mock such as MinIO)
  * never have to mutate `process.env` to substitute a client — mirrors the
- * lazy, injectable-client pattern `lib/auth/twilio.ts` uses for the same
- * reason (importing this module must not throw before env vars are set,
- * e.g. during `pnpm build`'s static analysis pass).
+ * lazy client pattern `lib/db/client.ts` uses for the same reason
+ * (importing this module must not throw before env vars are set, e.g.
+ * during `pnpm build`'s static analysis pass).
  */
 import { Buffer } from "node:buffer";
 import {
@@ -84,7 +84,7 @@ let cachedConfig: R2Config | undefined;
 /**
  * Returns an S3-compatible client for R2, constructed from `config` (or
  * lazily from env on first call with no `config`). Caches the env-derived
- * client across calls the same way `lib/auth/twilio.ts` does; an explicit
+ * client across calls the same way `lib/db/client.ts` does; an explicit
  * `config` (used by tests) always builds a fresh, uncached client so tests
  * can point at different mock endpoints without cross-contaminating a
  * shared singleton.

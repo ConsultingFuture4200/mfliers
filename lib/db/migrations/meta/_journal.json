@@ -64,6 +64,13 @@
       "when": 1782887324768,
       "tag": "0008_clear_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782935186092,
+      "tag": "0009_stormy_vulture",
+      "breakpoints": true
     }
   ]
 }

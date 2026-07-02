@@ -7,9 +7,10 @@ import sharp from "sharp";
  * The capture page (`app/campaigns/[id]/submit/[targetId]/page.tsx`) is a
  * pure client component: it never reads the DB/auth/R2 directly, only via
  * `fetch` to `/api/uploads/sign` and `/api/campaigns/[id]/submissions`. This
- * sandbox has no live R2/Twilio credentials configured for the dev server
- * (`.env.example`'s `R2_*`/`TWILIO_*` are empty — same constraint
- * `tests/e2e/player-session.spec.ts` documents for Twilio), so this suite
+ * sandbox has no live R2/email-provider credentials configured for the dev
+ * server (`.env.example`'s `R2_*`/`RESEND_API_KEY`/`SMTP_*` are empty — same
+ * constraint `tests/e2e/player-session.spec.ts` documents for the email
+ * provider), so this suite
  * intercepts those two network calls with `page.route` rather than driving
  * a real upload — this is standard Playwright practice for UI-level e2e,
  * and it's what lets this spec exercise the *real* browser-side flow (GPS

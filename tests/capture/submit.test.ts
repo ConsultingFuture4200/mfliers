@@ -89,7 +89,7 @@ describe.skipIf(!hasTestDatabase())("submitCapture (T4.1)", () => {
     const seed = await seedTwoCampaigns(db!);
     const player: Player = {
       id: seed.campaignA.playerId,
-      phone: "+15550001111",
+      email: "canvasser-a@example.com",
     };
     const targetId = seed.campaignA.targetIds[0];
     await claim(seed.campaignA.campaignId, targetId, player.id);
@@ -285,7 +285,7 @@ describe.skipIf(!hasTestDatabase())("submitCapture (T4.1)", () => {
     const seed = await seedTwoCampaigns(db!);
     const player: Player = {
       id: seed.campaignA.playerId,
-      phone: "+15550001111",
+      email: "canvasser-a@example.com",
     };
     const targetId = seed.campaignA.targetIds[1]; // never claimed
     const submissionId = randomUUID();

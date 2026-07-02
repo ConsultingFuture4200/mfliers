@@ -34,7 +34,7 @@ describe.skipIf(!hasTestDatabase())(
       seed = await seedTwoCampaigns(db!);
       const [player] = await db!
         .insert(schema.players)
-        .values({ phone: "+15559990000" })
+        .values({ email: "join-newplayer@example.com" })
         .returning({ id: schema.players.id });
       newPlayerId = player.id;
     });

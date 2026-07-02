@@ -150,7 +150,7 @@ describe.skipIf(!hasTestDatabase())(
       const seed = await seedTwoCampaigns(db!);
       const player: Player = {
         id: seed.campaignA.playerId,
-        phone: "+15550001111",
+        email: "canvasser-a@example.com",
       };
       const firstPost = { lat: 46.9, long: -123.8 };
       const firstReceivedAt = new Date("2026-06-30T12:00:00Z");
@@ -181,7 +181,7 @@ describe.skipIf(!hasTestDatabase())(
       const seed = await seedTwoCampaigns(db!);
       const player: Player = {
         id: seed.campaignA.playerId,
-        phone: "+15550001111",
+        email: "canvasser-a@example.com",
       };
       const firstPost = { lat: 46.9, long: -123.8 };
       const firstReceivedAt = new Date("2026-06-30T12:00:00Z");
@@ -211,7 +211,7 @@ describe.skipIf(!hasTestDatabase())(
       const seed = await seedTwoCampaigns(db!);
       const player: Player = {
         id: seed.campaignA.playerId,
-        phone: "+15550001111",
+        email: "canvasser-a@example.com",
       };
 
       const submission: Submission = buildSubmission({
@@ -228,7 +228,7 @@ describe.skipIf(!hasTestDatabase())(
 
     it("does not compare against a submission in a different campaign", async () => {
       const seed = await seedTwoCampaigns(db!);
-      // Same phone (global player identity) would need two separate
+      // Same email (global player identity) would need two separate
       // players in reality, but here we reuse campaignA's playerId under
       // campaignB's *own* membership scoping is irrelevant to this check —
       // the point is campaignId scoping, so post a real prior submission
@@ -252,7 +252,7 @@ describe.skipIf(!hasTestDatabase())(
       });
       const player: Player = {
         id: seed.campaignA.playerId,
-        phone: "+15550001111",
+        email: "canvasser-a@example.com",
       };
 
       const result = await checkTravelSpeed(submission, player);

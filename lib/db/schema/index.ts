@@ -7,6 +7,7 @@ export * from "./columns";
 export * from "./users";
 export * from "./campaigns";
 export * from "./players";
+export * from "./email-otp";
 export * from "./targets";
 export * from "./submissions";
 export * from "./campaign-memberships";
