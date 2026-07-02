@@ -324,10 +324,14 @@ export default function UniversalMap() {
     // (the landing section, or the standalone /map page) min-h-[70vh]
     // resolved to 0 and Mapbox rendered a blank 0-height canvas.
     <div className="relative h-[70vh] w-full">
+      {/* Inline position:absolute — mapbox-gl.css sets `.mapboxgl-map {
+          position: relative }` which (equal specificity, loaded later)
+          overrides a Tailwind `.absolute` class and collapses the box to
+          0 height. An inline style outranks the external stylesheet. */}
       <div
         ref={mapContainerRef}
         data-testid="universal-mapbox-container"
-        className="absolute inset-0"
+        style={{ position: "absolute", inset: 0 }}
       />
 
       {mapUnavailable ? (

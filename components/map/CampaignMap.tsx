@@ -306,10 +306,13 @@ export default function CampaignMap({ campaignId }: { campaignId: string }) {
     // container only has size if this positioned ancestor has a resolved
     // height; a collapsing flex-column parent left it 0-height (blank map).
     <div className="relative h-[70vh] w-full">
+      {/* Inline position:absolute — mapbox-gl.css's `.mapboxgl-map {
+          position: relative }` overrides a Tailwind `.absolute` class and
+          collapses the box to 0 height; inline style outranks it. */}
       <div
         ref={mapContainerRef}
         data-testid="mapbox-container"
-        className="absolute inset-0"
+        style={{ position: "absolute", inset: 0 }}
       />
 
       {banner ? (
