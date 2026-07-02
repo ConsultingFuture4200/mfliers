@@ -160,11 +160,17 @@ test.describe("public landing page", () => {
     await page.goto("/");
 
     const link = page.locator('[data-testid="player-login-link"]');
-    // A real Tab keypress (not a programmatic `.focus()`) so Chromium's
-    // focus-visible heuristic actually applies the `:focus-visible` ring
-    // this asserts on. The player-login link is the first focusable
-    // element in DOM order.
-    await page.keyboard.press("Tab");
+    // Real Tab keypresses (not a programmatic `.focus()`) so Chromium's
+    // focus-visible heuristic actually applies the `:focus-visible` ring this
+    // asserts on. The global SiteHeader now precedes the sign-in links, so tab
+    // through it until the player-login link receives focus.
+    for (
+      let i = 0;
+      i < 8 && !(await link.evaluate((el) => el === document.activeElement));
+      i++
+    ) {
+      await page.keyboard.press("Tab");
+    }
     await expect(link).toBeFocused();
 
     const boxShadow = await link.evaluate(

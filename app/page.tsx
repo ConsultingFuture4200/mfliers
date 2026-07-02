@@ -17,47 +17,22 @@
  * it, `UniversalMap` degrades to a keyboard-operable pin list (same fallback
  * as `/map`).
  */
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 import CampaignDirectory from "@/components/landing/CampaignDirectory";
 import UniversalMap from "@/components/map/UniversalMap";
 
 export default function Home() {
   return (
     <main className="flex min-h-screen w-full flex-1 flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-input px-4 py-3 sm:px-6">
-        <div className="flex flex-col">
-          <h1 className="text-lg font-semibold leading-tight">
-            Flier Canvassing Platform
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Claim a target, post a flier, snap a geotagged photo — get paid.
-          </p>
-        </div>
-        <nav aria-label="Sign in" className="flex flex-wrap gap-2">
-          <Link
-            href="/login"
-            data-testid="player-login-link"
-            className={buttonVariants({ variant: "default", size: "sm" })}
-          >
-            Player sign in
-          </Link>
-          <Link
-            href="/staff-login"
-            data-testid="staff-login-link"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            Host / admin sign in
-          </Link>
-          <Link
-            href="/map"
-            data-testid="universal-map-link"
-            className={buttonVariants({ variant: "ghost", size: "sm" })}
-          >
-            Full-screen map
-          </Link>
-        </nav>
-      </header>
+      {/* Navigation (sign-in links, Map) lives in the global SiteHeader
+          (app/layout.tsx). This slim strip is just the landing's title. */}
+      <div className="flex flex-col gap-0.5 px-4 py-3 sm:px-6">
+        <h1 className="text-lg font-semibold leading-tight">
+          Flier Canvassing Platform
+        </h1>
+        <p className="text-xs text-muted-foreground">
+          Claim a target, post a flier, snap a geotagged photo — get paid.
+        </p>
+      </div>
 
       {/* The live map is the landing: all campaigns' pins, front and center. */}
       <section
