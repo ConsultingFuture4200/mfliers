@@ -23,30 +23,27 @@ import UniversalMap from "@/components/map/UniversalMap";
 export default function Home() {
   return (
     <main className="flex min-h-screen w-full flex-1 flex-col">
-      {/* Navigation (sign-in links, Map) lives in the global SiteHeader
-          (app/layout.tsx). This slim strip is just the landing's title. */}
-      <div className="flex flex-col gap-0.5 px-4 py-3 sm:px-6">
-        <h1 className="text-lg font-semibold leading-tight">
-          Flier Canvassing Platform
+      {/* Navigation lives in the global SiteHeader (app/layout.tsx). This slim
+          strip is just the landing's title. */}
+      <div className="flex flex-col gap-1 px-4 py-4 sm:px-6">
+        <h1 className="font-heading text-xl font-bold leading-tight sm:text-2xl">
+          Mycofest Canvassing
         </h1>
-        <p className="text-xs text-muted-foreground">
-          Claim a target, post a flier, snap a geotagged photo — get paid.
+        <p className="text-sm text-muted-foreground">
+          Claim a target, post the flier, snap a geotagged photo — get paid.
         </p>
       </div>
 
       {/* The live map is the landing: all campaigns' pins, front and center. */}
-      <section
-        aria-label="Live map"
-        className="flex min-h-[62vh] flex-1 flex-col"
-      >
+      <section aria-label="Live map" className="flex flex-1 flex-col">
         <UniversalMap />
       </section>
 
       <section
         aria-label="Live campaigns"
-        className="flex w-full flex-col items-center gap-4 border-t border-input px-4 py-8 sm:px-6"
+        className="flex w-full flex-col items-center gap-4 border-t-2 border-foreground/15 px-4 py-8 sm:px-6"
       >
-        <h2 className="text-xl font-semibold">Live campaigns</h2>
+        <h2 className="font-heading text-xl font-bold">Live campaigns</h2>
         <CampaignDirectory />
       </section>
     </main>
