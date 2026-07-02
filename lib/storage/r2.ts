@@ -43,11 +43,17 @@ export interface R2Config {
   bucket: string;
   /**
    * Overrides the derived `https://<accountId>.r2.cloudflarestorage.com`
-   * endpoint. Not part of `.env.example` (R2 doesn't need it in
-   * production) — exists solely so tests can point this client at a local
-   * S3-compatible mock instead of live Cloudflare infrastructure.
+   * endpoint. Set via `R2_ENDPOINT` to target any S3-compatible store
+   * (e.g. Supabase Storage's S3 endpoint, or a local MinIO mock in tests)
+   * instead of live Cloudflare R2.
    */
   endpoint?: string;
+  /**
+   * SigV4 signing region. R2 ignores it ("auto"); other S3-compatible
+   * stores (Supabase Storage, AWS) require their real region — set via
+   * `R2_REGION`. Defaults to "auto".
+   */
+  region?: string;
 }
 
 /** How long a signed PUT URL remains valid for. Short-lived per the card
@@ -70,11 +76,19 @@ function requiredEnv(name: string): string {
  * var is missing — called lazily (only when a client is actually needed),
  * never at module load, so importing this module is side-effect-free. */
 export function loadR2ConfigFromEnv(): R2Config {
+  // With a custom endpoint (Supabase Storage S3, MinIO, ...), the endpoint is
+  // given directly, so R2_ACCOUNT_ID (only used to derive R2's own endpoint)
+  // isn't required. Without one, it is (to build the Cloudflare R2 endpoint).
+  const endpoint = process.env.R2_ENDPOINT || undefined;
   return {
-    accountId: requiredEnv("R2_ACCOUNT_ID"),
+    accountId: endpoint
+      ? (process.env.R2_ACCOUNT_ID ?? "")
+      : requiredEnv("R2_ACCOUNT_ID"),
     accessKeyId: requiredEnv("R2_ACCESS_KEY_ID"),
     secretAccessKey: requiredEnv("R2_SECRET_ACCESS_KEY"),
     bucket: requiredEnv("R2_BUCKET_NAME"),
+    endpoint,
+    region: process.env.R2_REGION || undefined,
   };
 }
 
@@ -92,7 +106,7 @@ let cachedConfig: R2Config | undefined;
 export function getR2Client(config?: R2Config): S3Client {
   if (config) {
     return new S3Client({
-      region: "auto",
+      region: config.region ?? "auto",
       endpoint:
         config.endpoint ??
         `https://${config.accountId}.r2.cloudflarestorage.com`,
