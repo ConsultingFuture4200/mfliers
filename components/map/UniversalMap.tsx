@@ -347,7 +347,7 @@ export default function UniversalMap() {
           pin={selected}
           onClose={() => setSelected(null)}
           onOpenCampaign={() => {
-            router.push(`/campaigns/${selected.campaignId}/map`);
+            router.push(`/campaigns/${selected.campaignId}`);
           }}
         />
       ) : null}
@@ -482,7 +482,7 @@ function PinDetailPanel({
         data-testid="universal-pin-open-campaign"
         onClick={onOpenCampaign}
       >
-        View this campaign&apos;s map
+        Open this campaign
       </Button>
     </div>
   );

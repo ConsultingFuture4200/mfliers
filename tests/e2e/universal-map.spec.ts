@@ -104,7 +104,7 @@ test.describe("universal aggregate map", () => {
     ).toContainText("Open");
 
     await panel.locator('[data-testid="universal-pin-open-campaign"]').click();
-    await expect(page).toHaveURL(`/campaigns/${CAMPAIGN_A}/map`);
+    await expect(page).toHaveURL(`/campaigns/${CAMPAIGN_A}`);
   });
 
   test("a green pin's detail shows its photo but never a username", async ({
