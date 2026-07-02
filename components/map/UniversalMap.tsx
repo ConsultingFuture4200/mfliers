@@ -145,7 +145,10 @@ export default function UniversalMap() {
     void (async () => {
       const mapboxgl = (await import("mapbox-gl")).default;
       if (cancelled) return;
-      if (!mapboxgl.supported() || !mapContainerRef.current) {
+      // mapbox-gl v3 removed `mapboxgl.supported()`; a WebGL-unsupported
+      // browser now throws in `new Map(...)` (caught below) or fires the map
+      // `error` event — both route to the fallback. Only guard the container.
+      if (!mapContainerRef.current) {
         setMapUnavailable(true);
         return;
       }

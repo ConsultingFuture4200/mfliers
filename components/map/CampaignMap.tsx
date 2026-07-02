@@ -21,8 +21,8 @@
  * touches the DOM during SSR.
  *
  * Graceful degradation (not a v1-scope "list view" feature — see
- * `tasks/lessons.md`): when there's no token, `mapboxgl.supported()` says
- * no, or the `Map` fails to construct, `PinFallbackList` renders the exact
+ * `tasks/lessons.md`): when there's no token, WebGL is unsupported, or the
+ * `Map` fails to construct/load, `PinFallbackList` renders the exact
  * same pins as a plain, keyboard-operable button list wired to the exact
  * same `handleTap`/`handleClaim` handlers the real markers use. This is
  * both the production no-token/no-WebGL fallback *and* this card's
@@ -201,7 +201,10 @@ export default function CampaignMap({ campaignId }: { campaignId: string }) {
     void (async () => {
       const mapboxgl = (await import("mapbox-gl")).default;
       if (cancelled) return;
-      if (!mapboxgl.supported() || !mapContainerRef.current) {
+      // mapbox-gl v3 removed `mapboxgl.supported()`; a WebGL-unsupported
+      // browser now throws in `new Map(...)` (caught below) or fires the map
+      // `error` event — both route to the fallback. Only guard the container.
+      if (!mapContainerRef.current) {
         setMapUnavailable(true);
         return;
       }
