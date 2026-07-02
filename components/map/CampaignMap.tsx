@@ -302,7 +302,10 @@ export default function CampaignMap({ campaignId }: { campaignId: string }) {
   }
 
   return (
-    <div className="relative flex min-h-[70vh] flex-1 flex-col">
+    // Explicit height (not min-h + flex-1): the `absolute inset-0` map
+    // container only has size if this positioned ancestor has a resolved
+    // height; a collapsing flex-column parent left it 0-height (blank map).
+    <div className="relative h-[70vh] w-full">
       <div
         ref={mapContainerRef}
         data-testid="mapbox-container"

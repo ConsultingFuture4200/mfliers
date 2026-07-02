@@ -318,7 +318,12 @@ export default function UniversalMap() {
   }
 
   return (
-    <div className="relative flex min-h-[70vh] flex-1 flex-col">
+    // Explicit height (not min-h + flex-1): the map container is
+    // `absolute inset-0`, so it only has size if this positioned ancestor
+    // has a real, resolved height. In a collapsing flex-column parent
+    // (the landing section, or the standalone /map page) min-h-[70vh]
+    // resolved to 0 and Mapbox rendered a blank 0-height canvas.
+    <div className="relative h-[70vh] w-full">
       <div
         ref={mapContainerRef}
         data-testid="universal-mapbox-container"
