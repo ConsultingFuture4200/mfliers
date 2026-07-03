@@ -20,6 +20,7 @@ interface Pin {
   lat: number;
   long: number;
   state: TargetState;
+  placeDetails: { address?: string } | null;
 }
 
 type Status = "loading" | "ready" | "signed-out" | "error";
@@ -107,7 +108,14 @@ export function TargetList({ campaignId }: { campaignId: string }) {
             data-state={pin.state}
             className="flex items-center gap-3 rounded-xl border-2 border-foreground/15 bg-card p-3"
           >
-            <span className="flex-1 text-sm font-medium">{pin.label}</span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-sm font-medium">{pin.label}</span>
+              {pin.placeDetails?.address ? (
+                <span className="truncate text-xs text-muted-foreground">
+                  {pin.placeDetails.address}
+                </span>
+              ) : null}
+            </span>
             <a
               href={businessMapsUrl(pin.label, pin.lat, pin.long)}
               target="_blank"

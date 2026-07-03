@@ -92,6 +92,16 @@ export interface Campaign {
   endAt: Date;
 }
 
+/** Optional business details for a target, enriched from OpenStreetMap (a
+ * one-time backfill, `scripts/enrich-targets.ts`). All fields optional — OSM
+ * coverage is partial; a target with no OSM match keeps `place_details` null. */
+export interface PlaceDetails {
+  address?: string;
+  phone?: string;
+  website?: string;
+  hours?: string;
+}
+
 /** A map pin a player can claim, post a flier at, and submit a photo for. */
 export interface Target {
   id: string;
@@ -103,6 +113,7 @@ export interface Target {
   claimedBy: string | null;
   claimExpiresAt: Date | null;
   filledBySubmissionId: string | null;
+  placeDetails: PlaceDetails | null;
 }
 
 /** A player's geotagged photo submission for a claimed target. */

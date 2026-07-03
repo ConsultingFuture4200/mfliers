@@ -152,14 +152,16 @@ describe.skipIf(!hasTestDatabase())("lib/campaign/map.ts", () => {
       }
     });
 
-    it("returns only id/label/lat/long/state — no claimedBy/claimExpiresAt", async () => {
+    it("returns only id/label/lat/long/state/placeDetails — no claimedBy/claimExpiresAt", async () => {
       const pins = await listMapPins(
         playerPrincipal(seed.campaignA.playerId),
         seed.campaignA.campaignId,
       );
       for (const pin of pins) {
+        // placeDetails is non-sensitive public business info (OSM address/
+        // phone/website/hours); claimedBy/claimExpiresAt must NOT leak here.
         expect(Object.keys(pin).sort()).toEqual(
-          ["id", "label", "lat", "long", "state"].sort(),
+          ["id", "label", "lat", "long", "state", "placeDetails"].sort(),
         );
       }
     });

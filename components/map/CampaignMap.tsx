@@ -411,6 +411,41 @@ function PinDetailPanel({
         Status: {PIN_STATE_LABEL[detail.state]}
       </p>
 
+      {detail.placeDetails ? (
+        <div className="mb-1 flex flex-col gap-1 text-sm">
+          {detail.placeDetails.address ? (
+            <p className="text-muted-foreground">
+              {detail.placeDetails.address}
+            </p>
+          ) : null}
+          {detail.placeDetails.hours ? (
+            <p className="font-mono text-xs text-muted-foreground">
+              {detail.placeDetails.hours}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-3">
+            {detail.placeDetails.phone ? (
+              <a
+                href={`tel:${detail.placeDetails.phone}`}
+                className="text-xs text-primary underline"
+              >
+                Call
+              </a>
+            ) : null}
+            {detail.placeDetails.website ? (
+              <a
+                href={detail.placeDetails.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary underline"
+              >
+                Website ↗
+              </a>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <a
         href={businessMapsUrl(detail.label, detail.lat, detail.long)}
         target="_blank"

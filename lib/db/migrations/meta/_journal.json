@@ -71,6 +71,13 @@
       "when": 1782935186092,
       "tag": "0009_stormy_vulture",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783058586024,
+      "tag": "0010_sweet_nomad",
+      "breakpoints": true
     }
   ]
 }

@@ -31,11 +31,12 @@
  * extension (`0000_enable_postgis.sql`) and the host/user_campaigns sync
  * trigger (`0003_host_user_campaign_invariant.sql`) are.
  */
-import { pgTable, uuid, text, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, jsonb, index, unique } from "drizzle-orm/pg-core";
 import { geographyPoint, timestamptz } from "./columns";
 import { targetStateEnum } from "./enums";
 import { campaigns } from "./campaigns";
 import { players } from "./players";
+import type { PlaceDetails } from "@/types/domain";
 
 export const targets = pgTable(
   "targets",
@@ -52,6 +53,10 @@ export const targets = pgTable(
     /** FK to `submissions(campaign_id, id)` is enforced at the DB level
      * only — see module doc comment above for why it isn't declared here. */
     filledBySubmissionId: uuid("filled_by_submission_id"),
+    /** Optional business details (address/phone/website/hours) enriched from
+     * OpenStreetMap via `scripts/enrich-targets.ts`. Null when OSM has no
+     * match. NOT exposed by the public universal-map read (ADR-0001). */
+    placeDetails: jsonb("place_details").$type<PlaceDetails>(),
   },
   (table) => [
     index("targets_campaign_id_idx").on(table.campaignId),

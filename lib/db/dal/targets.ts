@@ -55,6 +55,7 @@ const targetSelection = {
   claimedBy: targets.claimedBy,
   claimExpiresAt: targets.claimExpiresAt,
   filledBySubmissionId: targets.filledBySubmissionId,
+  placeDetails: targets.placeDetails,
 } as const;
 
 /** Lists every target belonging to `campaignId`. Never returns another

@@ -38,7 +38,12 @@ import { getSubmission } from "@/lib/db/dal/submissions";
 import { getPlayerById } from "@/lib/db/dal/players";
 import { createSignedGetUrl } from "@/lib/storage/r2";
 import { TargetNotFoundError } from "@/lib/target/state-machine";
-import type { Coordinate, Target, TargetState } from "@/types/domain";
+import type {
+  Coordinate,
+  PlaceDetails,
+  Target,
+  TargetState,
+} from "@/types/domain";
 
 /** Thrown when `campaignId` doesn't resolve to a campaign at all — the map
  * routes' 404 case, distinct from `TargetNotFoundError` (a real campaign,
@@ -85,6 +90,7 @@ function assertMapAccess(principal: MapPrincipal, campaignId: string): void {
 export interface MapPin {
   id: string;
   label: string;
+  placeDetails: PlaceDetails | null;
   lat: number;
   long: number;
   state: TargetState;
@@ -97,6 +103,7 @@ function toPin(target: Target): MapPin {
     lat: target.lat,
     long: target.long,
     state: target.state,
+    placeDetails: target.placeDetails,
   };
 }
 
@@ -147,6 +154,10 @@ export interface TargetDetail {
    * matching this field's pre-existing behavior.
    */
   username: string | null;
+  /** Business details (address/phone/website/hours) enriched from OSM. Not
+   * sensitive — returned for any pin state, independent of the photo/username
+   * gates above. `null` when OSM had no match for this business. */
+  placeDetails: PlaceDetails | null;
 }
 
 /**
@@ -193,6 +204,7 @@ export async function getTargetDetail(
       photoUrl: null,
       submissionGps: null,
       username: null,
+      placeDetails: target.placeDetails,
     };
   }
 
@@ -221,5 +233,6 @@ export async function getTargetDetail(
     submissionGps:
       canSeeSensitiveDetail && submission ? submission.deviceGps : null,
     username: usernameAllowed ? (player?.email ?? null) : null,
+    placeDetails: target.placeDetails,
   };
 }
