@@ -1,10 +1,18 @@
-# CLAUDE.md — Flier Canvassing Platform
+# CLAUDE.md — Flier Canvassing Platform (Mycofest)
 
 > Agent operating instructions for this repository. Read this before touching code.
 > **Project:** multi-tenant, gamified flier-canvassing platform. First tenant: Mycofest.
-> **Last updated:** 2026-06-30
+> **Last updated:** 2026-07-02
 
-This is a **spec-driven build (SDD)**. The specification, not this file and not your own judgment, is the source of truth for *what* to build. This file governs *how* you work in the repo. When they appear to conflict, the spec/constitution win — flag the conflict, do not silently resolve it.
+**Status:** Phase 1 is **built, verified, and deployed live** — https://mfliers-eight.vercel.app
+(Vercel + Supabase Postgres/PostGIS). Phase-1 work was a **spec-driven build (SDD)**; the
+task cards are done. Ongoing work is **operator-directed** enhancement (post-Phase-1), so
+the "card is the contract" discipline below applies when building *from a card*; for
+operator-directed changes, honor the constitution non-negotiables, keep tests green, and
+record any decision that touches a non-negotiable as an ADR (see `docs/decisions/`).
+
+When the spec/constitution and this file conflict, the spec/constitution win — flag the
+conflict, do not silently resolve it.
 
 ---
 
@@ -16,6 +24,7 @@ The build is fully specified. Do not invent scope. The authoritative documents, 
 2. **PRD** — `docs/prd.md` (from `flier-canvassing-platform-PRD-v0.4.0.md`). What the platform does; the FR-* requirements and EC-* exit criteria.
 3. **Phase plan** — `docs/phase-1-plan.html`. Deliverables, exit criteria, batch sequence, cost, risks.
 4. **Task cards** — `docs/tasks/batch-{1..5}.md`. The unit of work. Each card is self-contained; build exactly what a card specifies, nothing more.
+5. **Decision records** — `docs/decisions/*.md`. ADRs that lock in structure or amend a non-negotiable. Current: 0001 tenant-isolation = scoped-repository DAL; 0002 a 2nd sanctioned cross-campaign read (PII-free dedupe hashes); 0003 player auth = email one-time-code (superseded phone-OTP). A change touching a non-negotiable needs a new ADR.
 
 **Rule:** work is done card-by-card. Pick a task card, satisfy its acceptance criteria, respect its anti-requirements, stop. Do not pull work forward from later cards or invent requirements a card doesn't state. If a card is ambiguous or the spec is silent, insert a `NEEDS_CLARIFICATION` note and ask — never guess.
 
@@ -38,10 +47,11 @@ The build is fully specified. Do not invent scope. The authoritative documents, 
 | DB | PostgreSQL + **PostGIS** |
 | ORM | Drizzle (raw-SQL escape hatch for PostGIS) |
 | DB access | pooled connection (never raw from serverless) |
-| Hosting | Vercel (app) + managed PostGIS (external) |
-| Map | Mapbox GL JS |
-| Storage | Cloudflare R2 |
-| Auth | Auth.js + Twilio Verify (phone-OTP players; email/password host+admin) |
+| Hosting | Vercel (app) + **Supabase** managed Postgres+PostGIS |
+| Map | Mapbox GL JS (**v3**) |
+| Storage | S3-compatible client (`lib/storage/r2.ts`) → **Supabase Storage** live (R2-compatible; supports any S3 endpoint via `R2_ENDPOINT`) |
+| Auth | Auth.js v5 — **email one-time-code** for players (ADR-0003, was phone-OTP; Twilio removed); email/password host+admin |
+| UI system | shadcn **base-nova** (Base UI, not Radix) + field-guide design tokens (`docs/decisions`, `docs/prototype.jsx`) |
 | Test | Vitest (unit/integration) + Playwright (e2e) |
 | Package manager | **pnpm** |
 
@@ -124,10 +134,10 @@ Do not proceed past a gate on your own authority.
 
 ```bash
 pnpm install                 # install deps
-pnpm dev                     # local dev server
+pnpm dev                     # local dev server (port 3000)
 pnpm build                   # production build (must pass, strict TS)
 pnpm lint                    # ESLint (Next + TS strict)
-pnpm format --check          # Prettier check
+pnpm format:check            # Prettier check   (pnpm format = --write)
 pnpm test                    # Vitest unit/integration
 pnpm test tests/isolation    # the tenant-isolation suite (EC-5)
 pnpm test:e2e                # Playwright e2e
@@ -136,7 +146,61 @@ pnpm db:migrate              # apply migrations (needs DATABASE_URL, PostGIS)
 pnpm tsx scripts/seed-mycofest.ts   # seed the Mycofest campaign
 ```
 
-Env vars (see `.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `TWILIO_*`, `R2_*`, `MAPBOX_*`. Never commit `.env`.
+**DB- and browser-backed tests need env set INLINE** (bash env doesn't persist between
+tool calls). A local PostGIS via Docker is the standard test DB:
+
+```bash
+docker run -d --name mfliers-testdb -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=mfliers_test -p 5433:5432 postgis/postgis:16-3.4
+# then, prefixed on each command:
+DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5433/mfliers_test" pnpm db:migrate
+DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5433/mfliers_test" \
+  AUTH_SECRET=any R2_ACCOUNT_ID=t R2_ACCESS_KEY_ID=t R2_SECRET_ACCESS_KEY=t \
+  R2_BUCKET_NAME=t R2_PUBLIC_URL=https://x.test pnpm exec playwright test
+```
+
+Env vars (see `.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `R2_*` (+ optional
+`R2_ENDPOINT`/`R2_REGION` for Supabase Storage), `NEXT_PUBLIC_MAPBOX_TOKEN`,
+`RESEND_API_KEY`/`EMAIL_FROM` **or** `SMTP_*` (email OTP). Never commit `.env`.
+
+## Deploy & environment (live)
+
+- **Production:** https://mfliers-eight.vercel.app — Vercel project `mfliers`, scope
+  `consultingfuture4200s-projects`. Auto-deploys on push to `main`; or
+  `vercel deploy --prod --yes --scope consultingfuture4200s-projects`.
+- **DB = Supabase** (project ref in `docs/deploy.md`). App connects via the **transaction
+  pooler** (`...pooler.supabase.com:6543`) as `DATABASE_URL`. Run migrations against the
+  **session pooler** (`:5432`). The **direct** host `db.<ref>.supabase.co` is **IPv6-only**
+  and unreachable from IPv4-only environments — always use the pooler.
+- **Storage = Supabase Storage** (S3-compatible) via the R2 client + `R2_ENDPOINT`/`R2_REGION`.
+- **Email OTP delivery is NOT configured** on Vercel yet → login codes only go to the
+  server logs. Set `RESEND_API_KEY`+`EMAIL_FROM` (or `SMTP_*`) and redeploy for real email.
+
+## Hard-won gotchas (do not relearn these)
+
+- **`sharp` on Vercel:** `next.config.ts` must keep `serverExternalPackages:['sharp']` AND
+  `outputFileTracingIncludes` for the pnpm-nested `@img/sharp-*` + libvips `.so`, or the
+  submit/sign routes 500 with `ERR_DLOPEN_FAILED`.
+- **Mapbox GL v3:** `mapboxgl.supported()` was removed (don't call it). The map container
+  needs an **explicit height** (`h-[70vh]`, not `min-h`+`flex-1`) and `position:absolute`
+  via **inline style** (mapbox-gl.css's `.mapboxgl-map{position:relative}` overrides a
+  Tailwind `.absolute` class).
+- **Build must work with NO DB:** `lib/db/client.ts` is a lazy Proxy (connects on first
+  query, not import) so `next build` needs no live DB. Don't reintroduce import-time DB access.
+- **e2e asserts the no-token map fallback list:** run Playwright **without**
+  `NEXT_PUBLIC_MAPBOX_TOKEN` or the map specs fail (real canvas renders instead of the list).
+- **shadcn is `base-nova` = Base UI:** use the `render={<Link/>}` prop, not Radix `asChild`;
+  style Dropdown/Sheet triggers directly with `buttonVariants(...)`.
+- **Port 3000 squatters:** if e2e fails wholesale with empty errors, check
+  `ss -ltnp | grep :3000` — a stray server hijacks Playwright's `reuseExistingServer`.
+
+## Design system
+
+Field-guide aesthetic (Paper/Ink/Forest, Space Grotesk + Inter + mono, teardrop pins,
+2px editorial borders), dark-mode-safe. **Use semantic tokens only** (`bg-background`,
+`text-foreground`, `border-foreground/15`, `--pin-red/amber/green`) — never hardcoded hex.
+Brand primitives in `components/brand/` (Logo, Pin, StateBadge, Pill, StatCard, PageShell).
+Reference: `docs/prototype.jsx`.
 
 ---
 
