@@ -42,6 +42,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { Button } from "@/components/ui/button";
 import { StateBadge } from "@/components/brand/StateBadge";
 import { Pin } from "@/components/brand/Pin";
+import { businessMapsUrl } from "@/lib/maps";
 import type { MapPin, TargetDetail } from "@/lib/campaign/map";
 
 /** Within the card's "5-10s" polling band (requirement 5). */
@@ -411,12 +412,12 @@ function PinDetailPanel({
       </p>
 
       <a
-        href={`https://www.google.com/maps/search/?api=1&query=${detail.lat},${detail.long}`}
+        href={businessMapsUrl(detail.label, detail.lat, detail.long)}
         target="_blank"
         rel="noopener noreferrer"
         className="block font-mono text-xs text-muted-foreground underline"
       >
-        {detail.lat.toFixed(4)}, {detail.long.toFixed(4)} · Directions ↗
+        View on Google Maps ↗
       </a>
 
       {detail.state === "red" ? (

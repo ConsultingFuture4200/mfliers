@@ -11,6 +11,7 @@ import Link from "next/link";
 import { StateBadge } from "@/components/brand/StateBadge";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { businessMapsUrl } from "@/lib/maps";
 import type { TargetState } from "@/types/domain";
 
 interface Pin {
@@ -108,12 +109,12 @@ export function TargetList({ campaignId }: { campaignId: string }) {
           >
             <span className="flex-1 text-sm font-medium">{pin.label}</span>
             <a
-              href={`https://www.google.com/maps/search/?api=1&query=${pin.lat},${pin.long}`}
+              href={businessMapsUrl(pin.label, pin.lat, pin.long)}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-xs text-muted-foreground underline"
             >
-              Directions ↗
+              Google Maps ↗
             </a>
             <StateBadge state={pin.state} />
           </li>
