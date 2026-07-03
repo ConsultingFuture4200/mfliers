@@ -47,7 +47,7 @@ test.describe("public landing page", () => {
     await page.goto("/");
 
     await expect(
-      page.getByRole("heading", { name: "Mycofest Canvassing" }),
+      page.getByRole("heading", { name: "Post fliers. Drop pins. Get paid." }),
     ).toBeVisible();
   });
 
